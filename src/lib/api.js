@@ -65,4 +65,7 @@ export const api = {
 
   /** GET /api/reports/calendar — 달력 잔디(히트맵) 조회 */
   getCalendar: (year, month, token) => request(`/api/reports/calendar?year=${year}&month=${month}`, { token }),
+
+  /** POST /api/reports/daily/analyze — AI 일일 리포트 분석 요청 / 재생성 */
+  analyzeDailyReport: (date, token) => request(`/api/reports/daily/analyze${date ? `?date=${date}` : ''}`, { method: 'POST', token }),
 }

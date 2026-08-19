@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Btn, Card, Chip, Icon, MicroLabel, ScreenHeader, TONE } from '../components/ui'
 import { ChartCard, HourlyChart } from '../components/charts'
 import { api, getAccessToken } from '../lib/api'
+import { useApp } from '../state/AppContext'
 
 // 오늘 날짜 계산 (예: '8/19')
 const now = new Date()
@@ -78,10 +79,12 @@ function DayCell({ date, data, onSelect }) {
 }
 
 function DayReport({ date, dayData, onBack }) {
+  const { requestStretch } = useApp()
   const [dailyDetail, setDailyDetail] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [analyzing, setAnalyzing] = useState(false)
 
-  useEffect(() => {
+  const fetchDailyDetail = () => {
     if (!getAccessToken()) {
       setLoading(false)
       return
@@ -96,7 +99,28 @@ function DayReport({ date, dayData, onBack }) {
       })
       .catch((e) => console.warn('일일 리포트 상세 조회 실패:', e))
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    fetchDailyDetail()
   }, [date])
+
+  // AI 분석 요청 버튼 핸들러
+  const handleRequestAiAnalysis = async () => {
+    setAnalyzing(true)
+    try {
+      const [m, d] = date.split('/')
+      const year = new Date().getFullYear()
+      const formattedDate = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+
+      const res = await api.analyzeDailyReport(formattedDate)
+      setDailyDetail(res)
+    } catch (err) {
+      alert(err.message || 'AI 분석 요청에 실패했습니다. AI 서버가 켜져 있는지 확인해 주세요.')
+    } finally {
+      setAnalyzing(false)
+    }
+  }
 
   const hasData = Boolean(dailyDetail?.hasData || (dayData && dayData.hasData))
   const rate = dailyDetail?.rate ?? dayData?.rate ?? 0
@@ -110,9 +134,13 @@ function DayReport({ date, dayData, onBack }) {
   const holdMin = dailyDetail?.avgHoldMin ?? dayData?.hold ?? Math.round(rate * 0.6)
   const tone = rateTone(rate)
 
-  // 시간대별 실측 통계 (없으면 빈 리스트)
+  // 시간대별 실측 통계
   const hourlyList = dailyDetail?.hourlyStats && dailyDetail.hourlyStats.length > 0 ? dailyDetail.hourlyStats : []
+  const issueStats = dailyDetail?.issueStats || []
   const aiComment = dailyDetail?.llmSummary || dailyDetail?.llmCommentary
+  const highlights = dailyDetail?.llmHighlights || []
+  const adviceList = dailyDetail?.llmAdvice || []
+  const grade = dailyDetail?.grade
 
   return (
     <div>
@@ -126,13 +154,20 @@ function DayReport({ date, dayData, onBack }) {
             {date} ({dayData?.dow ?? '오늘'}) 상세 리포트
           </h1>
         </div>
-        {hasData ? (
-          <Chip tone={tone === TONE.good ? 'good' : tone === TONE.warn1 ? 'warn1' : 'warn2'}>
-            유지율 {rate}%
-          </Chip>
-        ) : (
-          <Chip tone="dim">기록 없음</Chip>
-        )}
+        <div className="flex items-center gap-2">
+          {grade && (
+            <Chip tone={grade === 'EXCELLENT' ? 'good' : grade === 'GOOD' ? 'good' : 'warn1'}>
+              등급: {grade}
+            </Chip>
+          )}
+          {hasData ? (
+            <Chip tone={tone === TONE.good ? 'good' : tone === TONE.warn1 ? 'warn1' : 'warn2'}>
+              유지율 {rate}%
+            </Chip>
+          ) : (
+            <Chip tone="dim">기록 없음</Chip>
+          )}
+        </div>
       </div>
 
       {!hasData && !loading ? (
@@ -171,46 +206,151 @@ function DayReport({ date, dayData, onBack }) {
             </Card>
           </div>
 
-          <ChartCard className="rise d4" title="시간대별 유지율" sub={`${date} · 실측 시간대별 유지율`}>
-            {hourlyList.length > 0 ? (
-              <HourlyChart data={hourlyList} />
-            ) : (
-              <div className="py-12 text-center text-xs text-dim">
-                해당 일자에는 시간대별 측정 데이터가 없습니다.
-              </div>
-            )}
-          </ChartCard>
+          <div className="grid grid-cols-12 gap-4">
+            {/* 시간대별 유지율 차트 (좌측 7컬럼) */}
+            <div className="col-span-12 lg:col-span-7">
+              <ChartCard className="rise d4 h-full" title="시간대별 유지율" sub={`${date} · 실측 시간대별 유지율`}>
+                {hourlyList.length > 0 ? (
+                  <HourlyChart data={hourlyList} />
+                ) : (
+                  <div className="py-12 text-center text-xs text-dim">
+                    해당 일자에는 시간대별 측정 데이터가 없습니다.
+                  </div>
+                )}
+              </ChartCard>
+            </div>
 
-          {/* AI 코멘트 */}
+            {/* 🚨 경고 알림 원인 분석 카드 (우측 5컬럼) */}
+            <div className="col-span-12 lg:col-span-5">
+              <Card className="rise d4 h-full p-6 flex flex-col">
+                <div className="flex items-center justify-between">
+                  <MicroLabel>경고 알림 원인 분석</MicroLabel>
+                  <Icon name="bell" size={14} className="text-warn1" />
+                </div>
+                
+                {issueStats.length > 0 ? (
+                  <div className="mt-4 space-y-3.5 flex-1">
+                    <p className="text-xs text-dim">
+                      오늘 주로 감지된 나쁜 자세 유형과 교정 스트레칭입니다.
+                    </p>
+                    {issueStats.map((item, idx) => (
+                      <div key={item.code} className="rounded-xl border border-line bg-surface/50 p-3">
+                        <div className="flex items-center justify-between text-xs mb-1.5">
+                          <span className="font-semibold text-hi flex items-center gap-1.5">
+                            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-warn1/20 text-[10px] font-mono text-warn1">
+                              {idx + 1}
+                            </span>
+                            {item.label}
+                          </span>
+                          <span className="font-mono text-dim font-medium">
+                            {item.count}회 ({item.ratio}%)
+                          </span>
+                        </div>
+                        {/* 프로그레스 바 */}
+                        <div className="h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden mb-2">
+                          <div className="h-full bg-warn1 rounded-full" style={{ width: `${item.ratio}%` }} />
+                        </div>
+                        <div className="flex items-center justify-between pt-1 border-t border-line/60">
+                          <span className="text-[11px] text-dim">{item.recommendedStretch}</span>
+                          {item.stretchId && requestStretch && (
+                            <button
+                              onClick={() => requestStretch(item.stretchId)}
+                              className="cursor-pointer text-[11px] font-medium text-good hover:underline flex items-center gap-0.5"
+                            >
+                              스트레칭 시작
+                              <Icon name="chevronRight" size={10} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="my-auto py-10 text-center text-xs text-dim">
+                    <Icon name="target" size={24} className="mx-auto text-good/40 mb-2" />
+                    <p className="text-hi font-medium">특이 경고 없음</p>
+                    <p className="mt-1">바른 자세를 모범적으로 잘 유지하셨습니다!</p>
+                  </div>
+                )}
+              </Card>
+            </div>
+          </div>
+
+          {/* AI 분석 코멘트 카드 */}
           <Card className="rise d5 mt-4 p-6">
             <div className="flex items-center justify-between">
-              <MicroLabel>AI 코멘트</MicroLabel>
-              {aiComment ? (
-                <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-good">
-                  <span className="h-1.5 w-1.5 rounded-full bg-good" />
-                  분석 완료
-                </span>
-              ) : (
-                <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-dim">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warn1" />
-                  {loading ? '불러오는 중...' : '분석 대기 중'}
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                <MicroLabel>AI 분석 코멘트</MicroLabel>
+                {aiComment && (
+                  <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.14em] text-good">
+                    <span className="h-1.5 w-1.5 rounded-full bg-good" />
+                    분석 완료
+                  </span>
+                )}
+              </div>
+
+              {/* AI 분석 요청 / 재생성 버튼 */}
+              <Btn 
+                size="sm" 
+                kind={aiComment ? "outline" : "primary"}
+                disabled={analyzing || !hasData}
+                onClick={handleRequestAiAnalysis}
+              >
+                {analyzing ? (
+                  <>
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+                    AI 분석 요청 중...
+                  </>
+                ) : (
+                  <>
+                    <Icon name="sparkle" size={13} />
+                    {aiComment ? 'AI 분석 재생성' : 'AI 분석 리포트 생성'}
+                  </>
+                )}
+              </Btn>
             </div>
+
             {aiComment ? (
-              <p className="mt-3 text-sm leading-relaxed text-mid whitespace-pre-line">
-                {aiComment}
-              </p>
-            ) : (
-              <>
-                <div className="mt-4 flex animate-pulse flex-col gap-2.5" aria-hidden>
-                  <div className="h-3 w-11/12 rounded bg-white/[0.06]" />
-                  <div className="h-3 w-3/5 rounded bg-white/[0.06]" />
-                </div>
-                <p className="mt-4 text-xs leading-relaxed text-dim">
-                  모니터링 종료 시 AI가 오늘 기록을 분석한 리포트 코멘트가 생성됩니다.
+              <div className="mt-4 space-y-4">
+                <p className="text-sm leading-relaxed text-mid whitespace-pre-line bg-surface/40 p-4 rounded-xl border border-line">
+                  {aiComment}
                 </p>
-              </>
+
+                {/* 하이라이트 요약 배지 */}
+                {highlights.length > 0 && (
+                  <div>
+                    <div className="text-[11px] font-mono text-dim uppercase tracking-wider mb-2">Highlights</div>
+                    <div className="flex flex-wrap gap-2">
+                      {highlights.map((h, i) => (
+                        <div key={i} className="flex items-center gap-1.5 rounded-lg bg-white/[0.04] border border-line px-3 py-1.5 text-xs text-mid">
+                          <span className="text-good">✓</span> {h}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* AI 개선 조언 */}
+                {adviceList.length > 0 && (
+                  <div>
+                    <div className="text-[11px] font-mono text-dim uppercase tracking-wider mb-2">Advice</div>
+                    <div className="space-y-1.5">
+                      {adviceList.map((a, i) => (
+                        <div key={i} className="flex items-start gap-2 text-xs text-dim">
+                          <span className="text-warn1 mt-0.5">•</span>
+                          <span>{a}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="mt-4">
+                <p className="text-xs leading-relaxed text-dim">
+                  상단의 <strong>[AI 분석 리포트 생성]</strong> 버튼을 누르면 AI가 오늘의 자세 측정 데이터를 정밀 분석하여 맞춤 피드백과 조언을 제공합니다.
+                </p>
+              </div>
             )}
           </Card>
         </>
