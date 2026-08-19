@@ -3,7 +3,90 @@ import { useApp } from '../state/AppContext'
 import { CameraView } from '../components/CameraView'
 import { Btn, Card, Icon, MicroLabel, PostureFigure } from '../components/ui'
 
-const STEPS = ['시작', '카메라', '바른 자세', '평소 자세', '완료']
+const STEPS = ['시작', '카메라', '자세 가이드', '바른 자세', '평소 자세', '완료']
+
+// 캡처 전 바른 자세 가이드 — 인체공학 권장 자세를 우리 도해 스타일로
+const GUIDE_POINTS = [
+  { n: 1, text: '턱은 가볍게 당기고 정면 주시', x: 230, y: 122 },
+  { n: 2, text: '양쪽 어깨는 힘을 빼고 이완', x: 166, y: 148 },
+  { n: 3, text: '깊숙이 앉아 허리를 등받이에 밀착', x: 152, y: 224 },
+  { n: 4, text: '팔꿈치는 수직, 손목까지는 수평', x: 252, y: 188 },
+  { n: 5, text: '고관절은 90–100° 굴곡', x: 162, y: 276 },
+  { n: 6, text: '허벅지는 수평, 종아리는 수직', x: 290, y: 302 },
+  { n: 7, text: '발바닥은 바닥에 평평하게', x: 320, y: 358 },
+  { n: 8, text: '모니터 상단은 눈높이, 시선은 아래 15° 이내', x: 504, y: 98 },
+]
+
+function GuideMarker({ n, x, y }) {
+  return (
+    <g>
+      <circle cx={x} cy={y} r="9" fill="#121517" stroke="rgba(62,201,143,0.65)" strokeWidth="1.5" />
+      <text
+        x={x}
+        y={y + 3}
+        textAnchor="middle"
+        fontSize="9"
+        fontWeight="600"
+        fill="#e9edeb"
+        fontFamily="IBM Plex Mono, monospace"
+      >
+        {n}
+      </text>
+    </g>
+  )
+}
+
+function PostureGuideDiagram() {
+  return (
+    <svg viewBox="0 0 640 400" className="w-full">
+      {/* 바닥 */}
+      <line x1="40" y1="368" x2="600" y2="368" stroke="rgba(255,255,255,0.16)" strokeWidth="1" />
+
+      {/* 의자 — 등받이는 허리에 밀착, 다리는 바닥까지 */}
+      <g stroke="rgba(255,255,255,0.25)" strokeWidth="3" strokeLinecap="round" fill="none">
+        <path d="M178 258 L172 148" />
+        <path d="M150 258 L240 258" />
+        <path d="M195 262 L195 358" />
+        <path d="M160 364 L232 364" />
+      </g>
+
+      {/* 책상 + 키보드 + 모니터 */}
+      <g stroke="rgba(255,255,255,0.25)" strokeWidth="3" strokeLinecap="round" fill="none">
+        <path d="M290 210 L580 210" />
+        <path d="M330 210 L330 368" />
+        <path d="M560 210 L560 368" />
+        <path d="M470 210 L470 188" />
+        <path d="M452 210 L488 210" />
+      </g>
+      <path d="M300 204 L352 204" stroke="rgba(255,255,255,0.4)" strokeWidth="4" strokeLinecap="round" />
+      <rect x="463" y="96" width="10" height="90" rx="3" fill="rgba(255,255,255,0.3)" transform="rotate(-4 468 140)" />
+
+      {/* 시선 — 수평 기준선과 15° 이내 */}
+      <line x1="216" y1="115" x2="458" y2="115" stroke="rgba(255,255,255,0.16)" strokeWidth="1" strokeDasharray="3 5" />
+      <line x1="216" y1="115" x2="458" y2="168" stroke="rgba(62,201,143,0.6)" strokeWidth="1.2" strokeDasharray="5 4" />
+      <text x="340" y="132" fontSize="10" fill="#3ec98f" opacity="0.85" fontFamily="IBM Plex Mono, monospace">
+        ≤15°
+      </text>
+
+      {/* 사람 — 바른 자세 (허리는 등받이에, 상체는 곧게) */}
+      <g fill="none" stroke="#3ec98f" strokeWidth="5" strokeLinecap="round">
+        <path d="M186 252 C187 220 190 180 194 140" />
+        <path d="M196 152 L207 210" />
+        <path d="M207 210 L296 206" />
+        <path d="M186 252 L258 252" />
+        <path d="M258 252 L262 360" />
+        <path d="M250 364 L296 364" strokeWidth="4" />
+      </g>
+      <circle cx="202" cy="117" r="12" fill="#3ec98f" />
+      {/* 고관절 각도 표시 */}
+      <path d="M206 252 A20 20 0 0 0 189 235" fill="none" stroke="rgba(62,201,143,0.5)" strokeWidth="1.5" />
+
+      {GUIDE_POINTS.map((p) => (
+        <GuideMarker key={p.n} n={p.n} x={p.x} y={p.y} />
+      ))}
+    </svg>
+  )
+}
 
 // 캡처 가이드용 상반신 실루엣 오버레이
 function SilhouetteOverlay() {
@@ -259,25 +342,65 @@ export default function Onboarding() {
           </div>
         )}
 
-        {step === 2 &&
+        {step === 2 && (
+          <div className="rise grid w-full max-w-5xl grid-cols-12 gap-6">
+            <div className="col-span-7">
+              <div className="rounded-xl border border-line bg-surface p-5">
+                <div className="mb-2 flex items-center justify-between">
+                  <MicroLabel>Reference — 인체공학 권장 자세</MicroLabel>
+                  <span className="font-mono text-[10px] tracking-[0.14em] text-dim">측면 기준</span>
+                </div>
+                <PostureGuideDiagram />
+              </div>
+            </div>
+            <div className="col-span-5 flex flex-col">
+              <MicroLabel>Posture Guide</MicroLabel>
+              <h2 className="mt-2 text-2xl font-bold tracking-tight">캡처 전에, 바른 자세부터</h2>
+              <p className="mt-2 text-sm leading-relaxed text-mid">
+                다음 단계에서 찍는 자세가 앞으로의 기준점이 됩니다. 번호를 따라 자세를 잡아 보세요.
+              </p>
+              <ul className="mt-4 flex flex-col gap-2">
+                {GUIDE_POINTS.map((p) => (
+                  <li key={p.n} className="flex items-start gap-2.5 text-[13px] leading-snug text-mid">
+                    <span className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-good/50 font-mono text-[10px] font-semibold text-hi">
+                      {p.n}
+                    </span>
+                    {p.text}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-auto flex gap-2 pt-5">
+                <Btn kind="ghost" onClick={() => setStep(1)}>
+                  이전
+                </Btn>
+                <Btn kind="primary" className="flex-1" onClick={() => setStep(3)}>
+                  가이드대로 앉았어요
+                  <Icon name="chevronRight" size={15} />
+                </Btn>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {step === 3 &&
           captureStep(
             'good',
             '바른 자세를 3초간 보여주세요',
-            '이 자세가 당신의 기준점이 됩니다. 지금 할 수 있는 가장 바른 자세로 앉아 주세요.',
+            '이 자세가 당신의 기준점이 됩니다. 방금 본 가이드대로, 지금 할 수 있는 가장 바른 자세로 앉아 주세요.',
             ['귀 — 어깨 — 골반이 일직선', '어깨는 뒤로, 힘은 빼고', '화면과 팔 길이만큼 거리'],
-            () => setStep(3),
+            () => setStep(4),
           )}
 
-        {step === 3 &&
+        {step === 4 &&
           captureStep(
             'usual',
             '이번엔 평소처럼 앉아 보세요',
             '기준 자세와의 차이로 감지 민감도를 잡아요. 잘 보이려고 하지 말고, 평소처럼. 솔직할수록 정확해져요.',
             ['방금 전까지 일하던 그 자세로', '모니터를 보며 자연스럽게', '10초 뒤를 상상하면 쉬워요'],
-            () => setStep(4),
+            () => setStep(5),
           )}
 
-        {step === 4 && (
+        {step === 5 && (
           <div className="rise flex w-full max-w-2xl flex-col items-center text-center">
             <span className="flex h-16 w-16 items-center justify-center rounded-full border border-good/40 bg-good/10">
               <Icon name="check" size={28} className="text-good" />
