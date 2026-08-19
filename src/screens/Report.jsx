@@ -1,64 +1,74 @@
-import { useState } from 'react'
-import { DAYS14, HOURLY } from '../data/dummy'
+import { useEffect, useState } from 'react'
 import { Btn, Card, Chip, Icon, MicroLabel, ScreenHeader, TONE } from '../components/ui'
 import { ChartCard, HourlyChart } from '../components/charts'
+import { api, getAccessToken } from '../lib/api'
 
-// 주 단위 리포트 — 첫 화면은 주간 날짜 스트립, 날짜 클릭 시 그날의 상세 리포트.
-const TODAY = '8/19'
+// 오늘 날짜 계산 (예: '8/19')
+const now = new Date()
+const TODAY = `${now.getMonth() + 1}/${now.getDate()}`
 const DOW = ['월', '화', '수', '목', '금', '토', '일']
+
+// 이번 주 월요일 ~ 일요일 계산
+function getCurrentWeekDays() {
+  const curr = new Date()
+  const first = curr.getDate() - (curr.getDay() === 0 ? 6 : curr.getDay() - 1)
+  const days = []
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(curr.setDate(first + i))
+    days.push(`${d.getMonth() + 1}/${d.getDate()}`)
+  }
+  return days
+}
+
+const THIS_WEEK_DAYS = getCurrentWeekDays()
 const WEEKS = [
-  { label: '8월 1주', range: '8/3 – 8/9', days: ['8/3', '8/4', '8/5', '8/6', '8/7', '8/8', '8/9'] },
-  { label: '8월 2주', range: '8/10 – 8/16', days: ['8/10', '8/11', '8/12', '8/13', '8/14', '8/15', '8/16'] },
-  { label: '8월 3주', range: '8/17 – 8/23', days: ['8/17', '8/18', '8/19', '8/20', '8/21', '8/22', '8/23'] },
+  { label: '이번 주', range: `${THIS_WEEK_DAYS[0]} – ${THIS_WEEK_DAYS[6]}`, days: THIS_WEEK_DAYS },
 ]
-const BY_DATE = Object.fromEntries(DAYS14.map((d) => [d.d, d]))
 
 const dateNum = (s) => {
+  if (!s) return 0
   const [m, d] = s.split('/').map(Number)
   return m * 100 + d
 }
 const isFuture = (d) => dateNum(d) > dateNum(TODAY)
 
-// 일자별 파생 더미 — 유지율이 낮을수록 알림이 많았던 것으로
-const alertsFor = (day) => Math.max(0, Math.round((88 - day.rate) / 4))
-const monitoredFor = (day) => `${6 + (day.rate % 3)}시간 ${(day.rate * 7) % 60}분`
-const hourlyFor = (day) => HOURLY.map((h) => ({ ...h, rate: Math.max(30, Math.min(98, h.rate + (day.rate - 73))) }))
-
 const rateTone = (v) => (v >= 80 ? TONE.good : v >= 65 ? TONE.warn1 : TONE.warn2)
 
-function DayCell({ date, onSelect }) {
-  const data = BY_DATE[date]
+function DayCell({ date, data, onSelect }) {
   const future = isFuture(date)
   const today = date === TODAY
   const dayNumber = date.split('/')[1]
-  const tone = data ? rateTone(data.rate) : null
+  const hasData = Boolean(data && data.hasData && data.rate != null)
+  const tone = hasData ? rateTone(data.rate) : null
 
   return (
     <button
-      disabled={!data}
+      disabled={!hasData}
       onClick={() => onSelect(date)}
-      className={`flex min-h-[132px] cursor-pointer flex-col rounded-xl border p-3 text-left transition-all duration-150 disabled:cursor-default ${
+      className={`flex min-h-[132px] flex-col rounded-xl border p-3 text-left transition-all duration-150 ${
+        hasData ? 'cursor-pointer' : 'cursor-default opacity-40'
+      } ${
         today
-          ? 'border-good/40 bg-good/[0.06]'
-          : data
+          ? 'border-good/50 bg-good/[0.07]'
+          : hasData
             ? 'border-line bg-surface hover:border-line-strong hover:bg-white/[0.03]'
-            : 'border-line bg-surface opacity-45'
+            : 'border-line bg-surface'
       }`}
     >
       <div className="flex items-baseline justify-between">
         <span className="font-mono text-lg font-semibold">{dayNumber}</span>
         {today && <span className="rounded bg-good/15 px-1.5 py-0.5 text-[10px] font-medium text-good">오늘</span>}
       </div>
-      {data ? (
+      {hasData ? (
         <>
           <div className="mt-auto flex items-baseline gap-0.5">
             <span className="font-mono text-xl font-semibold leading-none">{data.rate}</span>
             <span className="text-xs text-mid">%</span>
           </div>
           <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/[0.08]">
-            <div className={`h-full rounded-full ${tone.bg}`} style={{ width: `${data.rate}%` }} />
+            <div className={`h-full rounded-full ${tone?.bg ?? 'bg-good'}`} style={{ width: `${data.rate}%` }} />
           </div>
-          <span className="mt-1.5 text-[11px] text-dim">알림 {alertsFor(data)}회</span>
+          <span className="mt-1.5 text-[11px] text-dim">알림 {data.alertCount ?? 0}회</span>
         </>
       ) : (
         <span className="mt-auto text-[11px] text-dim">{future ? '—' : '기록 없음'}</span>
@@ -67,10 +77,42 @@ function DayCell({ date, onSelect }) {
   )
 }
 
-function DayReport({ date, onBack }) {
-  const day = BY_DATE[date]
-  const alerts = alertsFor(day)
-  const tone = rateTone(day.rate)
+function DayReport({ date, dayData, onBack }) {
+  const [dailyDetail, setDailyDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!getAccessToken()) {
+      setLoading(false)
+      return
+    }
+    const [m, d] = date.split('/')
+    const year = new Date().getFullYear()
+    const formattedDate = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+
+    api.getDailyReport(formattedDate)
+      .then((res) => {
+        setDailyDetail(res)
+      })
+      .catch((e) => console.warn('일일 리포트 상세 조회 실패:', e))
+      .finally(() => setLoading(false))
+  }, [date])
+
+  const hasData = Boolean(dailyDetail?.hasData || (dayData && dayData.hasData))
+  const rate = dailyDetail?.rate ?? dayData?.rate ?? 0
+  const alerts = dailyDetail?.totalAlerts ?? dayData?.alertCount ?? 0
+  
+  // 모니터링 시간 계산 (분 단위)
+  const totalMin = dailyDetail?.totalMonitoredMin ?? dayData?.totalMin ?? 0
+  const monitoredHours = Math.floor(totalMin / 60)
+  const monitoredMins = Math.round(totalMin % 60)
+  const monitoredStr = monitoredHours > 0 ? `${monitoredHours}시간 ${monitoredMins}분` : `${monitoredMins}분`
+  const holdMin = dailyDetail?.avgHoldMin ?? dayData?.hold ?? Math.round(rate * 0.6)
+  const tone = rateTone(rate)
+
+  // 시간대별 실측 통계 (없으면 빈 리스트)
+  const hourlyList = dailyDetail?.hourlyStats && dailyDetail.hourlyStats.length > 0 ? dailyDetail.hourlyStats : []
+  const aiComment = dailyDetail?.llmSummary || dailyDetail?.llmCommentary
 
   return (
     <div>
@@ -81,63 +123,98 @@ function DayReport({ date, onBack }) {
             주간 리포트로
           </button>
           <h1 className="mt-2 text-2xl font-bold tracking-tight">
-            {date} ({day.dow}) 리포트
+            {date} ({dayData?.dow ?? '오늘'}) 상세 리포트
           </h1>
         </div>
-        <Chip tone={tone === TONE.good ? 'good' : tone === TONE.warn1 ? 'warn1' : 'warn2'}>
-          유지율 {day.rate}%
-        </Chip>
+        {hasData ? (
+          <Chip tone={tone === TONE.good ? 'good' : tone === TONE.warn1 ? 'warn1' : 'warn2'}>
+            유지율 {rate}%
+          </Chip>
+        ) : (
+          <Chip tone="dim">기록 없음</Chip>
+        )}
       </div>
 
-      <div className="mb-4 grid grid-cols-4 gap-4">
-        <Card className="rise d1 flex flex-col gap-2 p-5">
-          <MicroLabel>자세 유지율</MicroLabel>
-          <div className="flex items-baseline gap-1.5">
-            <span className="font-mono text-[28px] font-semibold leading-none">{day.rate}</span>
-            <span className="text-sm text-mid">%</span>
+      {!hasData && !loading ? (
+        <Card className="rise p-12 text-center">
+          <Icon name="clock" size={32} className="mx-auto text-dim mb-3" />
+          <p className="text-sm text-mid">이 날짜에는 측정된 모니터링 기록이 없어요.</p>
+          <p className="mt-1 text-xs text-dim">모니터링 화면에서 자세를 측정해 보세요.</p>
+        </Card>
+      ) : (
+        <>
+          <div className="mb-4 grid grid-cols-4 gap-4">
+            <Card className="rise d1 flex flex-col gap-2 p-5">
+              <MicroLabel>자세 유지율</MicroLabel>
+              <div className="flex items-baseline gap-1.5">
+                <span className="font-mono text-[28px] font-semibold leading-none">{hasData ? rate : '—'}</span>
+                {hasData && <span className="text-sm text-mid">%</span>}
+              </div>
+            </Card>
+            <Card className="rise d2 flex flex-col gap-2 p-5">
+              <MicroLabel>경고 알림</MicroLabel>
+              <div className="flex items-baseline gap-1.5">
+                <span className="font-mono text-[28px] font-semibold leading-none">{hasData ? alerts : '—'}</span>
+                {hasData && <span className="text-sm text-mid">회</span>}
+              </div>
+            </Card>
+            <Card className="rise d3 flex flex-col gap-2 p-5">
+              <MicroLabel>시간당 평균 유지</MicroLabel>
+              <div className="flex items-baseline gap-1.5">
+                <span className="font-mono text-[28px] font-semibold leading-none">{hasData ? holdMin : '—'}</span>
+                {hasData && <span className="text-sm text-mid">분</span>}
+              </div>
+            </Card>
+            <Card className="rise d4 flex flex-col gap-2 p-5">
+              <MicroLabel>모니터링 시간</MicroLabel>
+              <div className="font-mono text-[28px] font-semibold leading-none">{hasData ? monitoredStr : '—'}</div>
+            </Card>
           </div>
-        </Card>
-        <Card className="rise d2 flex flex-col gap-2 p-5">
-          <MicroLabel>경고 알림</MicroLabel>
-          <div className="flex items-baseline gap-1.5">
-            <span className="font-mono text-[28px] font-semibold leading-none">{alerts}</span>
-            <span className="text-sm text-mid">회</span>
-          </div>
-        </Card>
-        <Card className="rise d3 flex flex-col gap-2 p-5">
-          <MicroLabel>시간당 평균 유지</MicroLabel>
-          <div className="flex items-baseline gap-1.5">
-            <span className="font-mono text-[28px] font-semibold leading-none">{day.hold}</span>
-            <span className="text-sm text-mid">분</span>
-          </div>
-        </Card>
-        <Card className="rise d4 flex flex-col gap-2 p-5">
-          <MicroLabel>모니터링 시간</MicroLabel>
-          <div className="font-mono text-[28px] font-semibold leading-none">{monitoredFor(day)}</div>
-        </Card>
-      </div>
 
-      <ChartCard className="rise d4" title="시간대별 유지율" sub={`${date} (${day.dow}) · 더미 데이터`}>
-        <HourlyChart data={hourlyFor(day)} />
-      </ChartCard>
+          <ChartCard className="rise d4" title="시간대별 유지율" sub={`${date} · 실측 시간대별 유지율`}>
+            {hourlyList.length > 0 ? (
+              <HourlyChart data={hourlyList} />
+            ) : (
+              <div className="py-12 text-center text-xs text-dim">
+                해당 일자에는 시간대별 측정 데이터가 없습니다.
+              </div>
+            )}
+          </ChartCard>
 
-      {/* AI 코멘트 — 리포트 분석 API 연동 시 채워지는 자리 */}
-      <Card className="rise d5 mt-4 p-6">
-        <div className="flex items-center justify-between">
-          <MicroLabel>AI 코멘트</MicroLabel>
-          <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-dim">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warn1" />
-            분석 대기 중
-          </span>
-        </div>
-        <div className="mt-4 flex animate-pulse flex-col gap-2.5" aria-hidden>
-          <div className="h-3 w-11/12 rounded bg-white/[0.06]" />
-          <div className="h-3 w-3/5 rounded bg-white/[0.06]" />
-        </div>
-        <p className="mt-4 text-xs leading-relaxed text-dim">
-          이 날의 기록에 대한 AI 분석 코멘트가 이 자리에 채워질 예정이에요.
-        </p>
-      </Card>
+          {/* AI 코멘트 */}
+          <Card className="rise d5 mt-4 p-6">
+            <div className="flex items-center justify-between">
+              <MicroLabel>AI 코멘트</MicroLabel>
+              {aiComment ? (
+                <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-good">
+                  <span className="h-1.5 w-1.5 rounded-full bg-good" />
+                  분석 완료
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-dim">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warn1" />
+                  {loading ? '불러오는 중...' : '분석 대기 중'}
+                </span>
+              )}
+            </div>
+            {aiComment ? (
+              <p className="mt-3 text-sm leading-relaxed text-mid whitespace-pre-line">
+                {aiComment}
+              </p>
+            ) : (
+              <>
+                <div className="mt-4 flex animate-pulse flex-col gap-2.5" aria-hidden>
+                  <div className="h-3 w-11/12 rounded bg-white/[0.06]" />
+                  <div className="h-3 w-3/5 rounded bg-white/[0.06]" />
+                </div>
+                <p className="mt-4 text-xs leading-relaxed text-dim">
+                  모니터링 종료 시 AI가 오늘 기록을 분석한 리포트 코멘트가 생성됩니다.
+                </p>
+              </>
+            )}
+          </Card>
+        </>
+      )}
     </div>
   )
 }
@@ -145,33 +222,52 @@ function DayReport({ date, onBack }) {
 export default function Report() {
   const [weekIdx, setWeekIdx] = useState(WEEKS.length - 1)
   const [selected, setSelected] = useState(null)
+  const [dbDaysMap, setDbDaysMap] = useState({})
 
-  if (selected) return <DayReport date={selected} onBack={() => setSelected(null)} />
+  // 백엔드 대시보드 데이터 조회
+  useEffect(() => {
+    if (!getAccessToken()) return
+    api.getReportDashboard()
+      .then((data) => {
+        if (data && data.days14 && data.days14.length > 0) {
+          const map = {}
+          data.days14.forEach((item) => {
+            map[item.d] = item
+          })
+          setDbDaysMap(map)
+        }
+      })
+      .catch((err) => {
+        console.warn('대시보드 리포트 조회 실패:', err)
+      })
+  }, [])
+
+  if (selected) {
+    return (
+      <DayReport 
+        date={selected} 
+        dayData={dbDaysMap[selected]} 
+        onBack={() => setSelected(null)} 
+      />
+    )
+  }
 
   const week = WEEKS[weekIdx]
-  const weekData = week.days.map((d) => BY_DATE[d]).filter(Boolean)
-  const avg = weekData.length ? Math.round(weekData.reduce((a, x) => a + x.rate, 0) / weekData.length) : null
-  const totalAlerts = weekData.reduce((a, x) => a + alertsFor(x), 0)
-  const goalDays = weekData.filter((x) => x.rate >= 70).length
+  const weekData = week.days.map((d) => dbDaysMap[d]).filter(Boolean)
+  const validData = weekData.filter((x) => x && x.hasData && x.rate != null)
+  
+  const avg = validData.length ? Math.round(validData.reduce((a, x) => a + x.rate, 0) / validData.length) : null
+  const totalAlerts = validData.reduce((a, x) => a + (x.alertCount ?? 0), 0)
+  const goalDays = validData.filter((x) => x.rate >= 70).length
 
   return (
     <div>
-      <ScreenHeader title="자세 리포트" desc="주 단위 기록이에요 — 날짜를 누르면 그날의 리포트로 들어갑니다." />
+      <ScreenHeader title="자세 리포트" desc="주 단위 실측 기록이에요 — 날짜를 누르면 그날의 상세 리포트로 들어갑니다." />
 
-      {/* 주 이동 내비게이션 */}
+      {/* 주간 날짜 카드 */}
       <Card className="rise d1 mb-4 flex items-center justify-between px-4 py-3">
-        <Btn size="sm" kind="ghost" disabled={weekIdx === 0} onClick={() => setWeekIdx((i) => i - 1)}>
-          <Icon name="chevronRight" size={14} className="rotate-180" />
-          지난주
-        </Btn>
-        <div className="text-center">
-          <div className="text-sm font-semibold">{week.label}</div>
-          <div className="mt-0.5 font-mono text-[11px] text-dim">{week.range}</div>
-        </div>
-        <Btn size="sm" kind="ghost" disabled={weekIdx === WEEKS.length - 1} onClick={() => setWeekIdx((i) => i + 1)}>
-          다음 주
-          <Icon name="chevronRight" size={14} />
-        </Btn>
+        <div className="font-semibold text-sm">{week.label} ({week.range})</div>
+        <div className="font-mono text-xs text-dim">실측 데이터 모드</div>
       </Card>
 
       {/* 요일별 날짜 카드 */}
@@ -184,7 +280,7 @@ export default function Report() {
       </div>
       <div className="rise d2 grid grid-cols-7 gap-2.5">
         {week.days.map((d) => (
-          <DayCell key={d} date={d} onSelect={setSelected} />
+          <DayCell key={d} date={d} data={dbDaysMap[d]} onSelect={setSelected} />
         ))}
       </div>
 
@@ -200,8 +296,8 @@ export default function Report() {
         <Card className="rise d4 flex flex-col gap-2 p-5">
           <MicroLabel>경고 알림 합계</MicroLabel>
           <div className="flex items-baseline gap-1.5">
-            <span className="font-mono text-[28px] font-semibold leading-none">{totalAlerts}</span>
-            <span className="text-sm text-mid">회</span>
+            <span className="font-mono text-[28px] font-semibold leading-none">{validData.length > 0 ? totalAlerts : '—'}</span>
+            {validData.length > 0 && <span className="text-sm text-mid">회</span>}
           </div>
         </Card>
         <Card className="rise d5 flex flex-col gap-2 p-5">
@@ -210,8 +306,8 @@ export default function Report() {
             <Icon name="flame" size={14} className="text-warn1" />
           </div>
           <div className="flex items-baseline gap-1.5">
-            <span className="font-mono text-[28px] font-semibold leading-none">{goalDays}</span>
-            <span className="text-sm text-mid">일</span>
+            <span className="font-mono text-[28px] font-semibold leading-none">{validData.length > 0 ? goalDays : '—'}</span>
+            {validData.length > 0 && <span className="text-sm text-mid">일</span>}
           </div>
         </Card>
       </div>

@@ -17,13 +17,14 @@ export class ApiError extends Error {
 }
 
 async function request(path, { method = 'GET', body, token } = {}) {
+  const currentToken = token ?? getAccessToken()
   let res
   try {
     res = await fetch(BASE + path, {
       method,
       headers: {
         ...(body ? { 'Content-Type': 'application/json' } : {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
     })
@@ -54,4 +55,14 @@ export const api = {
 
   /** GET /api/me — 저장된 토큰 검증 겸용 */
   me: (token) => request('/api/me', { token }),
+
+  // ── 📊 리포트 & 통계 API ──────────────────────────────────────────
+  /** GET /api/reports/dashboard — 레포트 화면 전체 대시보드 (14일 추이, 시간대별) */
+  getReportDashboard: (token) => request('/api/reports/dashboard', { token }),
+
+  /** GET /api/reports/daily — 특정 날짜 일일 레포트 상세 조회 */
+  getDailyReport: (date, token) => request(`/api/reports/daily${date ? `?date=${date}` : ''}`, { token }),
+
+  /** GET /api/reports/calendar — 달력 잔디(히트맵) 조회 */
+  getCalendar: (year, month, token) => request(`/api/reports/calendar?year=${year}&month=${month}`, { token }),
 }
