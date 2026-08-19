@@ -170,15 +170,16 @@ const CONNECTIONS = [
 ]
 const POINTS = [0, 7, 8, 11, 12, 13, 14, 15, 16, 23, 24]
 
-// 미리보기가 거울 모드 + object-cover이므로, 같은 변환으로 그린다
-export function drawPose(canvas, video, lm, active) {
+// 미리보기가 거울 모드 + object-cover이므로, 같은 변환으로 그린다.
+// clear=false 면 기존 그림(예: 가이드 실루엣) 위에 겹쳐 그린다.
+export function drawPose(canvas, video, lm, active, { clear = true } = {}) {
   if (!canvas || !video) return
   const cw = canvas.clientWidth
   const ch = canvas.clientHeight
   if (canvas.width !== cw) canvas.width = cw
   if (canvas.height !== ch) canvas.height = ch
   const ctx = canvas.getContext('2d')
-  ctx.clearRect(0, 0, cw, ch)
+  if (clear) ctx.clearRect(0, 0, cw, ch)
   if (!lm) return
   const vw = video.videoWidth
   const vh = video.videoHeight

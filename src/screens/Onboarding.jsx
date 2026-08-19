@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../state/AppContext'
 import { useAuth } from '../state/AuthContext'
 import { aiApi, aiEnabled, captureFrame } from '../lib/aiApi'
+import { computeMetrics } from '../lib/postureDetector'
+import { drawPose } from '../lib/poseRules'
 import { CameraView } from '../components/CameraView'
 import { usePoseLandmarker } from '../hooks/usePoseLandmarker'
 import { Btn, Card, Icon, MicroLabel, PostureFigure } from '../components/ui'
@@ -15,11 +17,11 @@ function copyLandmarks(landmarks) {
   return landmarks.map(({ x, y, z }) => ({ x, y, z }))
 }
 
-// 캡처 순간에도 실루엣 안에 있는지 확인한다. 기준 자세는 이미지가 아니라
-// 이 좌표만 저장하므로, 이후 모니터링에서 같은 카메라 위치를 유지할 수 있다.
+// 캡처 전 실시간 검사 — 실루엣은 순수 시각 가이드(판정 없음)이고,
+// 가시성 + 바른 자세 조건(어깨·고개·목, 판정 지표 절대값)만 충족하면 캡처할 수 있다.
 function assessCalibrationPose(landmarks) {
   if (!landmarks) {
-    return { aligned: false, message: '실루엣 안에 상반신을 맞춰 주세요' }
+    return { aligned: false, message: '실루엣 안에 상반신을 맞춰 주세요', conds: null }
   }
 
   const requiredVisible = REQUIRED_LANDMARKS.every((index) => {
@@ -28,25 +30,38 @@ function assessCalibrationPose(landmarks) {
   })
 
   if (!requiredVisible) {
-    return { aligned: false, message: '얼굴과 양쪽 어깨가 모두 보이게 앉아 주세요' }
+    return { aligned: false, message: '얼굴과 양쪽 어깨가 모두 보이게 앉아 주세요', conds: null }
   }
 
-  const visible = landmarks.filter((point) => (point.visibility ?? 1) >= MIN_VISIBILITY)
-  const xs = visible.map((point) => point.x)
-  const ys = visible.map((point) => point.y)
-  const minX = Math.min(...xs)
-  const maxX = Math.max(...xs)
-  const minY = Math.min(...ys)
-  const maxY = Math.max(...ys)
-  const centerX = (minX + maxX) / 2
-  const inFrame = minX >= 0.08 && maxX <= 0.92 && minY >= 0.04 && maxY <= 0.98
-  const centered = centerX >= 0.3 && centerX <= 0.7
+  const m = computeMetrics(landmarks)
+  const conds = [
+    {
+      id: 'shoulder',
+      label: '어깨는 수평으로',
+      ok: Math.abs(m.shoulder_tilt_deg) <= 6,
+      value: `${Math.abs(m.shoulder_tilt_deg).toFixed(0)}°`,
+    },
+    {
+      id: 'head',
+      label: '고개는 기울이지 않게',
+      ok: Math.abs(m.head_roll_deg) <= 6,
+      value: `${Math.abs(m.head_roll_deg).toFixed(0)}°`,
+    },
+    {
+      id: 'neck',
+      label: '목은 곧게 — 귀가 어깨 위에',
+      ok: Math.abs(m.neck_tilt_deg) <= 8,
+      value: `${Math.abs(m.neck_tilt_deg).toFixed(0)}°`,
+    },
+  ]
+  const aligned = conds.every((c) => c.ok)
 
-  if (!inFrame || !centered) {
-    return { aligned: false, message: '실루엣 중앙에 상반신을 맞춰 주세요' }
-  }
+  let message = '좋아요. 이 자세 그대로 캡처하세요'
+  if (!conds[0].ok) message = '어깨가 기울었어요 — 수평을 맞춰 주세요'
+  else if (!conds[1].ok) message = '고개를 곧게 세워 주세요'
+  else if (!conds[2].ok) message = '귀가 어깨 위에 오도록 목을 세워 주세요'
 
-  return { aligned: true, message: '좋아요. 이 위치를 유지해 주세요' }
+  return { aligned, message, conds }
 }
 
 // 캡처 전 바른 자세 가이드 — 인체공학 권장 자세를 우리 도해 스타일로
@@ -132,7 +147,7 @@ function PostureGuideDiagram() {
   )
 }
 
-// 캡처 가이드용 상반신 실루엣 오버레이
+// 캡처 가이드용 상반신 실루엣 오버레이 — 판정 없는 순수 시각 가이드
 function SilhouetteOverlay({ poseState }) {
   const tone = poseState?.aligned ? 'text-good' : 'text-warn1'
   const message = poseState?.message || '실루엣에 상반신을 맞춰 주세요'
@@ -189,12 +204,14 @@ export default function Onboarding() {
   // AI 서버 캘리브레이션 상태: idle | sending | ok | fail
   const [aiCal, setAiCal] = useState({ status: 'idle', message: null })
   const videoRef = useRef(null)
+  const guideCanvasRef = useRef(null)
   const countRef = useRef(null)
   const pose = usePoseLandmarker(camera.status === 'active')
 
   useEffect(() => () => clearInterval(countRef.current), [])
 
-  // 기준 자세 캡처 화면에서만 현재 스켈레톤을 확인한다.
+  // 기준 자세 캡처 화면 — 스켈레톤을 측정하며 가이드 정합·자세 조건을 실시간 확인,
+  // 캔버스에 목표 실루엣과 내 스켈레톤을 함께 그린다.
   useEffect(() => {
     if (step !== 3 || camera.status !== 'active' || pose.status !== 'ready') {
       setPoseState(null)
@@ -202,9 +219,12 @@ export default function Onboarding() {
     }
 
     const id = setInterval(() => {
-      const result = pose.detect(videoRef.current)
+      const video = videoRef.current
+      const result = pose.detect(video)
       const landmarks = result?.landmarks?.[0] ?? null
-      setPoseState({ ...assessCalibrationPose(landmarks), detected: Boolean(landmarks) })
+      const state = { ...assessCalibrationPose(landmarks), detected: Boolean(landmarks) }
+      setPoseState(state)
+      drawPose(guideCanvasRef.current, video, landmarks, state.aligned)
     }, 150)
 
     return () => clearInterval(id)
@@ -289,6 +309,7 @@ export default function Onboarding() {
           showControls={false}
           overlay={
             <>
+              <canvas ref={guideCanvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
               <SilhouetteOverlay poseState={poseState} />
               {count !== null && (
                 <div className="absolute inset-0 flex items-center justify-center bg-ink/40">
@@ -309,12 +330,22 @@ export default function Onboarding() {
           앞으로 모니터링할 때 유지할 자세로 앉아 주세요. 실루엣 안에 위치를 맞추면 한 번 캡처하고 스켈레톤 좌표만 기준으로 저장해요.
         </p>
         <ul className="mt-5 flex flex-col gap-2.5">
-          {['귀 — 어깨 — 골반이 일직선', '어깨는 뒤로, 힘은 빼고', '화면과 팔 길이만큼 거리'].map((c) => (
-            <li key={c} className="flex items-start gap-2.5 text-sm text-mid">
-              <Icon name="check" size={15} className="mt-0.5 shrink-0 text-good" />
-              {c}
-            </li>
-          ))}
+          {poseState?.conds
+            ? poseState.conds.map((c) => (
+                <li key={c.id} className="flex items-center gap-2.5 text-sm">
+                  <Icon name="check" size={15} className={`shrink-0 ${c.ok ? 'text-good' : 'text-dim'}`} />
+                  <span className={c.ok ? 'text-mid' : 'text-dim'}>{c.label}</span>
+                  {c.value && <span className="ml-auto font-mono text-xs text-dim">{c.value}</span>}
+                </li>
+              ))
+            : ['어깨는 수평으로', '고개는 기울이지 않게', '목은 곧게 — 귀가 어깨 위에'].map(
+                (c) => (
+                  <li key={c} className="flex items-center gap-2.5 text-sm text-dim">
+                    <Icon name="check" size={15} className="shrink-0" />
+                    {c}
+                  </li>
+                ),
+              )}
         </ul>
         <Card className="mt-5 border-good/20 bg-good/[0.05] p-3.5 text-xs leading-relaxed text-mid">
           <div className="flex items-center gap-2 text-good">

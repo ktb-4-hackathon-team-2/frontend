@@ -71,6 +71,7 @@ export function AppProvider({ children }) {
     quietFrom: '22:00',
     quietTo: '08:00',
     stretchMin: 50,
+    sensitivity: 50, // 판정 민감도 슬라이더 (0=느슨 ~ 100=민감) → strictness 배율로 변환
   })
   const [alertCount, setAlertCount] = useState(4)
   const [elapsedSec, setElapsedSec] = useState(4 * 3600 + 32 * 60) // 오늘 누적 (더미로 시작)
@@ -113,6 +114,8 @@ export function AppProvider({ children }) {
   const trackerRef = useRef(new AlertTracker())
   // 지표 EMA 상태
   const emaRef = useRef(null)
+  // 마지막으로 인식된 랜드마크 — 화면 오버레이(스켈레톤)용, 리렌더 없이 ref로 공유
+  const lastLandmarksRef = useRef(null)
 
   // 기준 자세 지표 — 캘리브레이션 랜드마크에서 한 번만 계산.
   // 저장된 기준 좌표는 캡처 시점에 이미 가시성 검사를 통과했고 visibility 필드가
@@ -184,6 +187,8 @@ export function AppProvider({ children }) {
       const landmarks = result?.landmarks?.[0] ?? null
       const now = Date.now() / 1000
 
+      lastLandmarksRef.current = landmarks
+
       if (!landmarks || !visibilityOk(landmarks)) {
         // 자리 비움/가림 — 비운 시간은 나쁜 자세 지속시간에서 제외 (note_absence)
         trackerRef.current.noteAbsence(now)
@@ -201,7 +206,10 @@ export function AppProvider({ children }) {
         : raw
       emaRef.current = metrics
 
-      const ev = evaluateAgainstBaseline(metrics, baselineMetrics, 'medium')
+      // 민감도 슬라이더(0~100) → 임계값 배율. 지수 매핑으로 0=2.0×(매우 느슨),
+      // 50=1.0×(서버 medium과 동일), 100=0.5×(매우 민감) — 체감되는 4배 폭.
+      const strictScale = Math.pow(2, (50 - settings.sensitivity) / 50)
+      const ev = evaluateAgainstBaseline(metrics, baselineMetrics, strictScale)
       const alert = trackerRef.current.update(ev.posture_ok, now)
       // 서버와 같은 매핑: alert_level 1→토스트(warn2), 2→전체화면(warn3).
       // warn1(위젯 신호)은 나쁜 자세가 WARN1_AFTER_SEC 이상 이어졌을 때만 — 깜빡임 방지.
@@ -226,7 +234,7 @@ export function AppProvider({ children }) {
       setTick((t) => t + 1)
     }, DETECT_INTERVAL_MS)
     return () => clearInterval(id)
-  }, [calibrated, baselineMetrics, camera.status, paused, pose.detect, pose.status, screen])
+  }, [calibrated, baselineMetrics, camera.status, paused, pose.detect, pose.status, screen, settings.sensitivity])
 
   // 일시정지/재개 시 경고 지속시간 리셋
   useEffect(() => {
@@ -317,7 +325,7 @@ export function AppProvider({ children }) {
     alertCount, elapsedSec, stretchLeft, stretchSuggest, setStretchSuggest,
     postponeStretch, startStretchNow, resetSession,
     pendingStretchId, requestStretch, clearPendingStretch,
-    tick, camera, detectionVideoRef, localDetection,
+    tick, camera, detectionVideoRef, lastLandmarksRef, localDetection,
     aiBaselineId, saveAiBaselineId,
   }
 

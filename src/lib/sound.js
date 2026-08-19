@@ -1,8 +1,24 @@
-// 알림음 — 에셋 없이 WebAudio로 합성. Tauri WebView에서도 동작한다.
+// 알림음 — 차임/우드는 WebAudio 합성, 커스텀 알람은 번들된 WAV 재생.
+import funnyAlarmUrl from '../../static/funny_alarm.wav'
+
 let audioCtx = null
 function ctx() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)()
   return audioCtx
+}
+
+let funnyAudio = null
+function playFunnyAlarm() {
+  try {
+    if (!funnyAudio) {
+      funnyAudio = new Audio(funnyAlarmUrl)
+      funnyAudio.volume = 0.7
+    }
+    funnyAudio.currentTime = 0
+    funnyAudio.play().catch(() => {})
+  } catch {
+    // 재생 실패는 치명적이지 않음
+  }
 }
 
 export function isQuietNow({ quietOn, quietFrom, quietTo }) {
@@ -19,6 +35,10 @@ export function isQuietNow({ quietOn, quietFrom, quietTo }) {
 
 export function playChime(kind = 'chime') {
   if (kind === 'none') return
+  if (kind === 'funny') {
+    playFunnyAlarm()
+    return
+  }
   try {
     const a = ctx()
     const t0 = a.currentTime

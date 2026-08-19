@@ -1,8 +1,34 @@
+import { useEffect, useRef } from 'react'
 import { useApp, DETECT_INTERVAL_MS } from '../state/AppContext'
+import { drawPose } from '../lib/poseRules'
 import { CameraView } from '../components/CameraView'
 import { Btn, Card, Chip, Icon, MicroLabel, PostureFigure, TONE } from '../components/ui'
 import { REGION_LABEL } from '../data/dummy'
 import { fmtClock, fmtDur, fmtDurShort } from '../lib/format'
+
+// 3×3 삼분할 격자 — 프레이밍 참고선
+function drawGrid(canvas) {
+  const cw = canvas.clientWidth
+  const ch = canvas.clientHeight
+  if (canvas.width !== cw) canvas.width = cw
+  if (canvas.height !== ch) canvas.height = ch
+  const ctx = canvas.getContext('2d')
+  ctx.clearRect(0, 0, cw, ch)
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)'
+  ctx.lineWidth = 1
+  for (let i = 1; i <= 2; i++) {
+    const x = (cw * i) / 3
+    const y = (ch * i) / 3
+    ctx.beginPath()
+    ctx.moveTo(x, 0)
+    ctx.lineTo(x, ch)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(0, y)
+    ctx.lineTo(cw, y)
+    ctx.stroke()
+  }
+}
 
 function regionTone(v) {
   if (v >= 80) return TONE.good
@@ -47,7 +73,19 @@ export default function Monitor() {
     meta, posture, paused, setPaused, postureSinceSec,
     alertCount, elapsedSec, stretchLeft, settings, camera, tick,
     startStretchNow, postponeStretch, localDetection,
+    detectionVideoRef, lastLandmarksRef,
   } = useApp()
+  const overlayRef = useRef(null)
+
+  // 격자 + 스켈레톤 오버레이 — 감지 틱마다 최신 랜드마크를 그린다
+  useEffect(() => {
+    const canvas = overlayRef.current
+    if (!canvas) return
+    drawGrid(canvas)
+    const video = detectionVideoRef.current
+    const lm = paused ? null : lastLandmarksRef.current
+    if (video && lm) drawPose(canvas, video, lm, posture === 'good', { clear: false })
+  }, [tick, posture, paused, camera.status, detectionVideoRef, lastLandmarksRef])
   // 판정 중이면 실측값(포팅된 posture.py 계산), 아니면 상태별 기본값
   const tracking = localDetection.status === 'tracking'
   const score = tracking && localDetection.displayScore != null ? localDetection.displayScore : meta.score
@@ -118,7 +156,10 @@ export default function Monitor() {
           <MicroLabel>카메라</MicroLabel>
           <span className="text-[11px] text-dim">영상은 기기 밖으로 나가지 않아요</span>
         </div>
-        <CameraView className="aspect-[4/3]" />
+        <CameraView
+          className="aspect-[4/3]"
+          overlay={<canvas ref={overlayRef} className="pointer-events-none absolute inset-0 h-full w-full" />}
+        />
         <div className="mt-4 flex items-center gap-2 border-t border-line pt-3.5">
           <span
             className={`h-1.5 w-1.5 rounded-full ${

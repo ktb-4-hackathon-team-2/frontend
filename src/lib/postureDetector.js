@@ -6,7 +6,8 @@
 // 모니터링 판정에 쓰는 기본 임계값 (strictness=medium 기준)
 export const THRESHOLDS = {
   neck_tilt_deg: 12.0, // 목 기울기 변화 허용치 (도)
-  shoulder_tilt_deg: 7.0, // 어깨 기울기 변화 허용치 (도)
+  shoulder_tilt_deg: 9.0, // 어깨 기울기 변화 허용치 (도) — 원본 config.py는 7.0, 과민해서 완화
+
   head_down_drop: 0.18, // 머리 숙임: baseline 대비 비율 감소 허용치
   lean_ratio: 0.13, // 어깨 너비 변화율(가까워짐/멀어짐) 허용치
   shift_x: 0.12, // 좌우 이동 허용치 (정규화 좌표)
@@ -81,7 +82,9 @@ const round3 = (v) => Math.round(v * 1000) / 1000
  * score: 최대 편차 비율 (0=완벽, 1.0 이상 = 임계치 초과)
  */
 export function evaluateAgainstBaseline(metrics, baselineMetrics, strictness = 'medium') {
-  const scale = STRICTNESS_SCALE[strictness] ?? 1.0
+  // 파이썬 원본은 low/medium/high 이름만 받지만, 프론트는 민감도 슬라이더를 위해
+  // 숫자 배율(0.7~1.4)도 허용한다 — 숫자가 작을수록 민감.
+  const scale = typeof strictness === 'number' ? strictness : (STRICTNESS_SCALE[strictness] ?? 1.0)
   const b = baselineMetrics
   const issues = []
   const deviations = {}
@@ -100,10 +103,18 @@ export function evaluateAgainstBaseline(metrics, baselineMetrics, strictness = '
     'neck_tilt', metrics.neck_tilt_deg - b.neck_tilt_deg,
     THRESHOLDS.neck_tilt_deg, '목이 기울거나 앞으로 나왔어요 (거북목 주의)',
   )
-  check(
-    'shoulder_tilt', metrics.shoulder_tilt_deg - b.shoulder_tilt_deg,
-    THRESHOLDS.shoulder_tilt_deg, '어깨가 한쪽으로 기울었어요',
-  )
+
+  // 목-어깨 판정 분리 보정 (원본 posture.py에는 없음 — lite 모델 한계 대응):
+  // 목만 꺾으면 어깨 랜드마크가 몇 도씩 따라 흔들려 어깨 판정이 같이 내려간다.
+  // "어깨선 대비 머리 상대 기울기"가 어깨 변화량을 초과하는 만큼(목이 주도한 만큼)만
+  // 어깨 편차에서 깎는다. 몸 전체가 기울면 상대 기울기≈0이라 보정이 걸리지 않고,
+  // 머리를 수평으로 유지한 채 어깨만 틀면 초과분이 없어 감지가 그대로 유지된다.
+  const shoulderDeltaRaw = metrics.shoulder_tilt_deg - b.shoulder_tilt_deg
+  const relHeadRoll =
+    metrics.head_roll_deg - metrics.shoulder_tilt_deg - (b.head_roll_deg - b.shoulder_tilt_deg)
+  const bleed = 0.35 * Math.max(0, Math.abs(relHeadRoll) - Math.abs(shoulderDeltaRaw))
+  const shoulderDelta = Math.sign(shoulderDeltaRaw) * Math.max(0, Math.abs(shoulderDeltaRaw) - bleed)
+  check('shoulder_tilt', shoulderDelta, THRESHOLDS.shoulder_tilt_deg, '어깨가 한쪽으로 기울었어요')
   // head_down은 '감소'만 문제 (머리를 숙임)
   const drop = (b.head_down - metrics.head_down) / Math.max(Math.abs(b.head_down), 1e-6)
   check('head_down', Math.max(drop, 0.0), THRESHOLDS.head_down_drop, '고개를 숙이고 있어요')

@@ -13,6 +13,7 @@ const ALERT_LEVELS = [
 const SOUNDS = [
   { value: 'chime', name: '차임' },
   { value: 'wood', name: '우드' },
+  { value: 'funny', name: '펀니' },
   { value: 'none', name: '무음' },
 ]
 
@@ -96,6 +97,28 @@ export default function Settings() {
               <Icon name="volume" size={13} />
               미리 듣기
             </Btn>
+          </Row>
+        </div>
+
+        <div className="border-b border-line">
+          <Row
+            label="판정 민감도"
+            desc={`높일수록 작은 흐트러짐에도 빨리 반응해요 · 현재 ${
+              settings.sensitivity < 34 ? '느슨' : settings.sensitivity < 67 ? '보통' : '민감'
+            } (임계값 ${Math.pow(2, (50 - settings.sensitivity) / 50).toFixed(2)}×)`}
+          >
+            <span className="text-[11px] text-dim">느슨</span>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              value={settings.sensitivity}
+              onChange={(e) => updateSetting('sensitivity', Number(e.target.value))}
+              className="w-40 accent-good"
+            />
+            <span className="text-[11px] text-dim">민감</span>
+            <span className="w-8 text-right font-mono text-xs text-mid">{settings.sensitivity}</span>
           </Row>
         </div>
 
