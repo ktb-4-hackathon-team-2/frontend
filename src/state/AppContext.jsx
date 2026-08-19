@@ -12,6 +12,7 @@ import {
   toRegionScores,
   visibilityOk,
 } from '../lib/postureDetector'
+import { enqueueStats, flushStats } from '../lib/statsReporter'
 
 // 화면 ↔ URL 매핑 — screen 상태의 원천은 URL이다
 export const SCREEN_PATHS = {
@@ -21,15 +22,18 @@ export const SCREEN_PATHS = {
   environment: '/environment',
   alerts: '/alerts',
   settings: '/settings',
+  summary: '/summary', // 모니터링 종료 후 세션 요약 (사이드바에는 없음)
 }
 const PATH_TO_SCREEN = Object.fromEntries(Object.entries(SCREEN_PATHS).map(([s, p]) => [p, s]))
 
 // rAF가 아니라 setInterval: 탭이 비활성화돼도 감지 루프는 계속 돌아야 한다.
-export const DETECT_INTERVAL_MS = 500
+// 2초 1틱 — 1분 집계(30샘플) 전송과 짝을 맞춘 주기. 모니터 화면의 스켈레톤은
+// 별도의 그리기 루프(0.3초)가 담당하므로 판정 주기와 무관하게 부드럽다.
+export const DETECT_INTERVAL_MS = 2000
 
-// 스무딩 — 서버는 1~2초 간격 프레임이라 자연히 뭉개지지만, 로컬은 0.5초마다 보므로
-// 지표를 EMA로 평활화한다 (α=0.25, 500ms 틱 기준 시상수 약 2초).
-const SMOOTH_ALPHA = 0.25
+// 지표 EMA 평활화 — 틱 주기에 맞춰 계수를 조정한다 (2초 틱 기준 α=0.6, 시상수 약 2초.
+// 틱을 되돌리면 α도 같이: 500ms 틱이면 0.25).
+const SMOOTH_ALPHA = 0.6
 // 나쁜 자세가 이 시간 이상 이어져야 warn1(위젯 신호)을 띄운다 — 순간 떨림으로 인한 깜빡임 방지
 const WARN1_AFTER_SEC = 1.5
 
@@ -116,6 +120,11 @@ export function AppProvider({ children }) {
   const emaRef = useRef(null)
   // 마지막으로 인식된 랜드마크 — 화면 오버레이(스켈레톤)용, 리렌더 없이 ref로 공유
   const lastLandmarksRef = useRef(null)
+  // 1분 집계 전송용 버퍼
+  const statsRef = useRef({ samples: [], issues: {}, alerts: 0, lastLevel: 0, windowStart: Date.now(), pausedSince: null, pausedMs: 0 })
+  // 세션 누적 집계 (종료 요약용) + 종료 요약 스냅샷
+  const sessionAggRef = useRef({ good: 0, total: 0 })
+  const [sessionSummary, setSessionSummary] = useState(null)
 
   // 기준 자세 지표 — 캘리브레이션 랜드마크에서 한 번만 계산.
   // 저장된 기준 좌표는 캡처 시점에 이미 가시성 검사를 통과했고 visibility 필드가
@@ -232,14 +241,95 @@ export function AppProvider({ children }) {
         reason: ev.issues[0]?.message ?? '기준 자세를 잘 유지하고 있어요',
       })
       setTick((t) => t + 1)
+
+      // 1분 집계 버퍼에 샘플 적재
+      const s = statsRef.current
+      s.samples.push({ ok: ev.posture_ok, score: ev.score })
+      for (const issue of ev.issues) s.issues[issue.code] = (s.issues[issue.code] ?? 0) + 1
+      if (alert.alert_level >= 1 && s.lastLevel < 1) s.alerts += 1
+      s.lastLevel = alert.alert_level
+
+      // 세션 누적 (종료 요약의 유지율)
+      sessionAggRef.current.total += 1
+      if (ev.posture_ok) sessionAggRef.current.good += 1
     }, DETECT_INTERVAL_MS)
     return () => clearInterval(id)
   }, [calibrated, baselineMetrics, camera.status, paused, pose.detect, pose.status, screen, settings.sensitivity])
 
-  // 일시정지/재개 시 경고 지속시간 리셋
+  // 일시정지/재개 시 경고 지속시간 리셋 + 일시정지 시간 집계
   useEffect(() => {
     trackerRef.current = new AlertTracker()
+    const s = statsRef.current
+    const now = Date.now()
+    if (paused) {
+      s.pausedSince = now
+    } else if (s.pausedSince) {
+      s.pausedMs += now - s.pausedSince
+      s.pausedSince = null
+    }
   }, [paused])
+
+  // 현재 집계 창을 닫아 큐에 넣고 전송을 시도한다
+  const flushWindow = useCallback((keepalive = false) => {
+    const s = statsRef.current
+    const now = Date.now()
+    let pausedMs = s.pausedMs
+    if (s.pausedSince) {
+      pausedMs += now - s.pausedSince
+      s.pausedSince = now
+    }
+    if (s.samples.length > 0 || pausedMs > 0) {
+      const good = s.samples.filter((x) => x.ok).length
+      const n = s.samples.length
+      enqueueStats({
+        window_start: new Date(s.windowStart).toISOString(),
+        window_end: new Date(now).toISOString(),
+        ticks: n,
+        good_ratio: n ? Math.round((good / n) * 1000) / 1000 : null,
+        avg_score: n ? Math.round((s.samples.reduce((a, x) => a + x.score, 0) / n) * 1000) / 1000 : null,
+        alerts: s.alerts,
+        issue_counts: s.issues,
+        paused_sec: Math.round(pausedMs / 1000),
+      })
+    }
+    s.samples = []
+    s.issues = {}
+    s.alerts = 0
+    s.windowStart = now
+    s.pausedMs = 0
+    flushStats({ keepalive })
+  }, [])
+
+  // 1분마다 집계를 앱 서버로 전송 (POST /api/monitor/stats — 백엔드 신규 API,
+  // 서버가 아직 없으면 큐에 쌓였다가 다음 주기에 재시도). 탭 종료 시 keepalive 플러시.
+  useEffect(() => {
+    const id = setInterval(() => flushWindow(false), 60_000)
+    const onPageHide = () => flushWindow(true)
+    window.addEventListener('pagehide', onPageHide)
+    return () => {
+      clearInterval(id)
+      window.removeEventListener('pagehide', onPageHide)
+    }
+  }, [flushWindow])
+
+  // 모니터링 종료 — 잔여 집계를 즉시 전송하고 카메라를 끈 뒤 세션 요약 화면으로.
+  // 유지율·알림 횟수는 즉시 보여주고, AI 코멘트는 추후 리포트 분석이 채운다.
+  const endMonitoring = useCallback(() => {
+    flushWindow(false)
+    const agg = sessionAggRef.current
+    setSessionSummary({
+      endedAt: Date.now(),
+      monitoredSec: elapsedSec,
+      ticks: agg.total,
+      goodRatio: agg.total > 0 ? agg.good / agg.total : null,
+      alerts: alertCount,
+    })
+    setPosture('good')
+    clearTimeout(demoTimer.current)
+    setDemoAlert(0)
+    camera.stop()
+    setScreen('summary')
+  }, [flushWindow, camera.stop, elapsedSec, alertCount, setScreen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     postureSince.current = Date.now()
@@ -304,6 +394,7 @@ export function AppProvider({ children }) {
     setAlertCount(0)
     setStretchLeft(settings.stretchMin * 60)
     setStretchSuggest(false)
+    sessionAggRef.current = { good: 0, total: 0 }
   }, [settings.stretchMin])
 
   const updateSetting = useCallback((key, value) => {
@@ -323,9 +414,9 @@ export function AppProvider({ children }) {
     widgetMode, setWidgetMode,
     settings, setSettings, updateSetting,
     alertCount, elapsedSec, stretchLeft, stretchSuggest, setStretchSuggest,
-    postponeStretch, startStretchNow, resetSession,
+    postponeStretch, startStretchNow, resetSession, endMonitoring, sessionSummary,
     pendingStretchId, requestStretch, clearPendingStretch,
-    tick, camera, detectionVideoRef, lastLandmarksRef, localDetection,
+    tick, camera, detectionVideoRef, lastLandmarksRef, localDetection, pose,
     aiBaselineId, saveAiBaselineId,
   }
 

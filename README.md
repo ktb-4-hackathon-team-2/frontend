@@ -37,6 +37,9 @@ npm run dev
   **수식을 바꿀 땐 파이썬/JS 양쪽을 함께 바꿀 것** (골든 테스트로 정합 검증함)
 - 경고 매핑: alert_level 1→토스트, 2→전체 화면, 나쁜 자세지만 경고 전이면 위젯만(warn1)
 - AI 서버(`VITE_AI_API_BASE`)의 역할: 캘리브레이션 baseline 등록(`/api/calibrate` 한 컷) + (추후) 리포트 LLM 분석
+- 판정 주기 2초/1틱, 1분마다 집계를 앱 서버로 전송: `POST /api/monitor/stats` (Bearer 인증).
+  **백엔드에 아직 없는 신규 API** — payload 스키마는 `src/lib/statsReporter.js` 주석 참고.
+  서버 미구현/네트워크 실패 시 큐(최대 30분치)에 보관 후 재시도, 탭 종료 시 keepalive 플러시
 
 ## 구조
 

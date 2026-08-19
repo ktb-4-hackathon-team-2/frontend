@@ -7,7 +7,6 @@ import { Widget, WidgetModeBackdrop } from './components/Widget'
 import { DebugPanel } from './components/DebugPanel'
 import { AlertLayer } from './components/AlertLayer'
 import { Btn, Chip, Icon, MicroLabel, PostureFigure } from './components/ui'
-import { fmtClock } from './lib/format'
 import Auth from './screens/Auth'
 import Onboarding from './screens/Onboarding'
 import Monitor from './screens/Monitor'
@@ -16,6 +15,7 @@ import Stretch from './screens/Stretch'
 import Environment from './screens/Environment'
 import AlertsDemo from './screens/AlertsDemo'
 import Settings from './screens/Settings'
+import Summary from './screens/Summary'
 
 const SCREENS = {
   monitor: Monitor,
@@ -24,10 +24,11 @@ const SCREENS = {
   environment: Environment,
   alerts: AlertsDemo,
   settings: Settings,
+  summary: Summary,
 }
 
 function Topbar() {
-  const { meta, paused, setPaused, elapsedSec, setWidgetMode, posture, localDetection } = useApp()
+  const { meta, paused, setWidgetMode, posture, localDetection } = useApp()
   const tracking = localDetection.status === 'tracking'
   const score = tracking && localDetection.displayScore != null ? localDetection.displayScore : meta.score
   return (
@@ -42,15 +43,6 @@ function Topbar() {
       )}
       {!paused && posture === 'good' && <span className="text-xs text-dim">조용히 지켜보는 중</span>}
       <div className="flex-1" />
-      <span className="flex items-center gap-1.5 font-mono text-xs text-mid">
-        <Icon name="clock" size={13} className="text-dim" />
-        {fmtClock(elapsedSec)}
-      </span>
-      <Btn size="sm" kind="ghost" onClick={() => setPaused(!paused)}>
-        <Icon name={paused ? 'play' : 'pause'} size={13} />
-        {paused ? '재개' : '일시정지'}
-      </Btn>
-      <div className="h-4 w-px bg-line-strong" />
       <Btn size="sm" kind="ghost" onClick={() => setWidgetMode(true)} title="앱을 접고 위젯만 남기기">
         <Icon name="pip" size={13} />
         위젯 모드
@@ -90,6 +82,7 @@ const TITLES = {
   '/environment': '환경 가이드',
   '/alerts': '알림 단계',
   '/settings': '설정',
+  '/summary': '모니터링 요약',
   '/widget': '위젯 모드',
 }
 

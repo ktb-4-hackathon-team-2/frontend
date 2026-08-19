@@ -72,20 +72,28 @@ export default function Monitor() {
   const {
     meta, posture, paused, setPaused, postureSinceSec,
     alertCount, elapsedSec, stretchLeft, settings, camera, tick,
-    startStretchNow, postponeStretch, localDetection,
-    detectionVideoRef, lastLandmarksRef,
+    startStretchNow, postponeStretch, localDetection, endMonitoring,
+    detectionVideoRef, pose,
   } = useApp()
   const overlayRef = useRef(null)
 
-  // 격자 + 스켈레톤 오버레이 — 감지 틱마다 최신 랜드마크를 그린다
+  // 격자 + 스켈레톤 오버레이 — 판정 틱(2초)과 별개로 0.3초 주기의 자체 그리기 루프.
+  // 이 화면에 있을 때만 돌므로 다른 화면의 판정 비용에는 영향 없다.
   useEffect(() => {
     const canvas = overlayRef.current
     if (!canvas) return
-    drawGrid(canvas)
-    const video = detectionVideoRef.current
-    const lm = paused ? null : lastLandmarksRef.current
-    if (video && lm) drawPose(canvas, video, lm, posture === 'good', { clear: false })
-  }, [tick, posture, paused, camera.status, detectionVideoRef, lastLandmarksRef])
+    const draw = () => {
+      drawGrid(canvas)
+      const video = detectionVideoRef.current
+      if (paused || !video || pose.status !== 'ready') return
+      const result = pose.detect(video)
+      const lm = result?.landmarks?.[0] ?? null
+      if (lm) drawPose(canvas, video, lm, posture === 'good', { clear: false })
+    }
+    draw()
+    const id = setInterval(draw, 300)
+    return () => clearInterval(id)
+  }, [paused, posture, camera.status, pose.status, pose.detect, detectionVideoRef])
   // 판정 중이면 실측값(포팅된 posture.py 계산), 아니면 상태별 기본값
   const tracking = localDetection.status === 'tracking'
   const score = tracking && localDetection.displayScore != null ? localDetection.displayScore : meta.score
@@ -145,8 +153,30 @@ export default function Monitor() {
             </div>
           </div>
         </div>
+        <div className="mt-auto flex items-center gap-3 border-t border-line pt-4">
+          <span className="flex items-center gap-1.5 font-mono text-sm text-mid">
+            <Icon name="clock" size={14} className="text-dim" />
+            {fmtClock(elapsedSec)}
+          </span>
+          <span className="text-[11px] text-dim">오늘 모니터링</span>
+          <div className="flex-1" />
+          <Btn size="sm" kind="outline" onClick={() => setPaused(!paused)}>
+            <Icon name={paused ? 'play' : 'pause'} size={13} />
+            {paused ? '재개' : '일시정지'}
+          </Btn>
+          <Btn
+            size="sm"
+            kind="ghost"
+            onClick={endMonitoring}
+            disabled={camera.status !== 'active'}
+            title="카메라를 끄고 지금까지의 기록을 서버로 전송합니다"
+          >
+            <Icon name="videoOff" size={13} />
+            모니터링 종료
+          </Btn>
+        </div>
         {!tracking && localDetection.reason && (
-          <p className="mt-6 border-t border-line pt-4 text-xs text-dim">{localDetection.reason}</p>
+          <p className="mt-3 text-xs text-dim">{localDetection.reason}</p>
         )}
       </Card>
 

@@ -1,7 +1,8 @@
 // 백엔드 API 클라이언트 — docs/api-spec.md 기준.
 // 토큰은 Authorization: Bearer 헤더로만 주고받는다 (쿠키 미사용).
 
-const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080'
+export const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080'
+const BASE = API_BASE
 
 export const TOKEN_KEY = 'bandeut.accessToken'
 export const getAccessToken = () => localStorage.getItem(TOKEN_KEY)
