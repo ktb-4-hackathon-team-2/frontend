@@ -1,8 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useRouter } from './RouterContext'
 import { useCamera } from '../hooks/useCamera'
+import { usePoseLandmarker } from '../hooks/usePoseLandmarker'
 import { POSTURE_META } from '../data/dummy'
 import { maybeChime } from '../lib/sound'
+import { assessPosture } from '../lib/postureDetector'
 
 // 화면 ↔ URL 매핑 — screen 상태의 원천은 URL이다
 export const SCREEN_PATHS = {
@@ -17,12 +19,6 @@ const PATH_TO_SCREEN = Object.fromEntries(Object.entries(SCREEN_PATHS).map(([s, 
 
 // rAF가 아니라 setInterval: 탭이 비활성화돼도 감지 루프는 계속 돌아야 한다.
 export const DETECT_INTERVAL_MS = 500
-
-// ── MediaPipe Pose Landmarker가 들어올 자리 ───────────────────────────
-// video 프레임을 받아 관절 좌표 → 자세 판정을 반환하게 된다. 지금은 구조만.
-function analyzeFrame(/* videoEl */) {
-  return null
-}
 
 export const WARN_LEVEL = { good: 0, warn1: 1, warn2: 2, warn3: 3 }
 
@@ -67,10 +63,14 @@ export function AppProvider({ children }) {
   const [elapsedSec, setElapsedSec] = useState(4 * 3600 + 32 * 60) // 오늘 누적 (더미로 시작)
   const [stretchLeft, setStretchLeft] = useState(50 * 60)
   const [stretchSuggest, setStretchSuggest] = useState(false)
-  const [tick, setTick] = useState(0) // 감지 루프 틱 (구조 확인용)
+  const [tick, setTick] = useState(0)
+  const [localDetection, setLocalDetection] = useState({ status: 'idle', score: null, rawLevel: 0, reason: null })
   const camera = useCamera()
+  const detectionVideoRef = useRef(null)
+  const pose = usePoseLandmarker(calibrated && screen === 'monitor' && camera.status === 'active')
   const demoTimer = useRef(null)
   const postureSince = useRef(Date.now())
+  const badPostureRef = useRef({ rawLevel: 0, since: 0 })
 
   // 1초 심장박동 — 모니터링 시간 + 스트레칭 카운트다운
   useEffect(() => {
@@ -88,15 +88,55 @@ export function AppProvider({ children }) {
     return () => clearInterval(id)
   }, [paused, settings.stretchMin])
 
-  // 감지 루프 — 카메라가 켜져 있고 일시정지가 아닐 때만
+  // 로컬 감지 루프 — 캘리브레이션 기준과 현재 프레임을 브라우저 안에서만 비교한다.
   useEffect(() => {
-    if (camera.status !== 'active' || paused) return
+    const enabled = calibrated && screen === 'monitor' && camera.status === 'active' && !paused
+    if (!enabled) {
+      if (camera.status !== 'active') setLocalDetection({ status: 'idle', score: null, rawLevel: 0, reason: null })
+      badPostureRef.current = { rawLevel: 0, since: 0 }
+      return
+    }
+
+    if (pose.status === 'loading') {
+      setLocalDetection({ status: 'loading', score: null, rawLevel: 0, reason: '자세 모델을 준비하는 중이에요' })
+      return
+    }
+    if (pose.status === 'error') {
+      setLocalDetection({ status: 'error', score: null, rawLevel: 0, reason: '자세 모델을 불러오지 못했어요' })
+      return
+    }
+    if (pose.status !== 'ready') return
+
     const id = setInterval(() => {
-      analyzeFrame()
+      const result = pose.detect(detectionVideoRef.current)
+      const landmarks = result?.landmarks?.[0] ?? null
+      const evaluation = assessPosture(landmarks, calibration?.landmarks)
+      const now = Date.now()
+
+      if (evaluation.status !== 'tracking') {
+        setLocalDetection({ ...evaluation, status: evaluation.status })
+        return
+      }
+
+      const rawLevel = evaluation.rawLevel
+      if (rawLevel === 0) {
+        badPostureRef.current = { rawLevel: 0, since: 0 }
+        setPosture('good')
+      } else {
+        if (badPostureRef.current.rawLevel !== rawLevel || badPostureRef.current.since === 0) {
+          badPostureRef.current = { rawLevel, since: now }
+        }
+        const heldMs = now - badPostureRef.current.since
+        // 나쁜 상태가 이어질수록 warn1 → warn2 → warn3으로 단계적으로 올린다.
+        const level = rawLevel >= 3 && heldMs >= 8000 ? 3 : rawLevel >= 2 && heldMs >= 3000 ? 2 : 1
+        setPosture(`warn${level}`)
+      }
+
+      setLocalDetection({ ...evaluation, status: 'tracking' })
       setTick((t) => t + 1)
     }, DETECT_INTERVAL_MS)
     return () => clearInterval(id)
-  }, [camera.status, paused])
+  }, [calibrated, calibration, camera.status, paused, pose.detect, pose.status, screen])
 
   useEffect(() => {
     postureSince.current = Date.now()
@@ -170,7 +210,7 @@ export function AppProvider({ children }) {
     settings, setSettings, updateSetting,
     alertCount, elapsedSec, stretchLeft, stretchSuggest, setStretchSuggest,
     postponeStretch, startStretchNow, resetSession,
-    tick, camera,
+    tick, camera, detectionVideoRef, localDetection,
   }
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

@@ -3,9 +3,9 @@ import { useApp } from '../state/AppContext'
 import { POSTURE_META } from '../data/dummy'
 import { Btn, Icon, MicroLabel, TONE } from './ui'
 
-// 자세 판정(MediaPipe)이 아직 없으므로, 판정 결과를 수동으로 흉내내는 개발용 패널.
+// 로컬 자세 판정과 알림 단계를 수동으로 확인할 수 있는 개발용 패널.
 export function DebugPanel() {
-  const { posture, setPosture, setStretchSuggest, resetSession, clearDemo } = useApp()
+  const { posture, setPosture, setStretchSuggest, resetSession, clearDemo, localDetection } = useApp()
   const [open, setOpen] = useState(false)
 
   return (
@@ -27,7 +27,7 @@ export function DebugPanel() {
             </button>
           </div>
           <p className="mb-3 text-[11px] leading-relaxed text-dim">
-            MediaPipe 판정 결과 대신 자세 상태를 수동으로 바꿉니다.
+            {localDetection.status === 'tracking' ? '카메라가 켜져 있으면 로컬 판정 결과가 주기적으로 반영됩니다.' : '자세 상태와 알림 단계를 수동으로 확인합니다.'}
           </p>
           <div className="grid grid-cols-2 gap-1.5">
             {Object.entries(POSTURE_META).map(([key, m]) => {

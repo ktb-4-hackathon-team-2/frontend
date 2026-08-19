@@ -46,7 +46,7 @@ export default function Monitor() {
   const {
     meta, posture, paused, setPaused, postureSinceSec,
     alertCount, elapsedSec, stretchLeft, settings, camera, tick,
-    startStretchNow, postponeStretch,
+    startStretchNow, postponeStretch, localDetection,
   } = useApp()
   const tone = TONE[meta.tone]
   const stretchTotal = settings.stretchMin * 60
@@ -103,8 +103,7 @@ export default function Monitor() {
           </div>
         </div>
         <p className="mt-6 border-t border-line pt-4 text-xs text-dim">
-          자세 판정 로직은 아직 연결 전이에요 — 좌측 하단 <span className="font-mono text-mid">DEV</span> 패널로 상태를
-          바꿔볼 수 있어요.
+          {localDetection.reason || '카메라를 켜면 이 기기에서 자세를 판정해요.'} · 영상은 서버로 전송되지 않아요.
         </p>
       </Card>
 
@@ -124,7 +123,9 @@ export default function Monitor() {
           <span className="font-mono text-[11px] text-dim">
             LOOP {DETECT_INTERVAL_MS}ms · TICK {tick.toLocaleString()}
           </span>
-          <span className="ml-auto text-[11px] text-dim">MediaPipe Pose 연결 예정</span>
+          <span className="ml-auto text-[11px] text-dim">
+            {localDetection.status === 'tracking' ? 'Local MediaPipe · 인식 중' : localDetection.status === 'loading' ? 'Local MediaPipe · 로딩 중' : 'Local MediaPipe · 대기'}
+          </span>
         </div>
       </Card>
 

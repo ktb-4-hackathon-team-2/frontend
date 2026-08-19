@@ -42,9 +42,9 @@ const STATUS_META = {
 }
 
 export function CameraView({ videoRef, overlay = null, className = '', showControls = true }) {
-  const { camera } = useApp()
+  const { camera, detectionVideoRef } = useApp()
   const localRef = useRef(null)
-  const ref = videoRef || localRef
+  const ref = videoRef || detectionVideoRef || localRef
   const active = camera.status === 'active'
 
   useEffect(() => {
