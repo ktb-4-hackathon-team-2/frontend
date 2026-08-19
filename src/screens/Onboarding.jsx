@@ -1,9 +1,51 @@
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../state/AppContext'
 import { CameraView } from '../components/CameraView'
+import { usePoseLandmarker } from '../hooks/usePoseLandmarker'
 import { Btn, Card, Icon, MicroLabel, PostureFigure } from '../components/ui'
 
-const STEPS = ['시작', '카메라', '자세 가이드', '바른 자세', '평소 자세', '완료']
+const STEPS = ['시작', '카메라', '자세 가이드', '기준 자세', '완료']
+
+const REQUIRED_LANDMARKS = [0, 7, 8, 11, 12]
+const MIN_VISIBILITY = 0.55
+
+function copyLandmarks(landmarks) {
+  return landmarks.map(({ x, y, z }) => ({ x, y, z }))
+}
+
+// 캡처 순간에도 실루엣 안에 있는지 확인한다. 기준 자세는 이미지가 아니라
+// 이 좌표만 저장하므로, 이후 모니터링에서 같은 카메라 위치를 유지할 수 있다.
+function assessCalibrationPose(landmarks) {
+  if (!landmarks) {
+    return { aligned: false, message: '실루엣 안에 상반신을 맞춰 주세요' }
+  }
+
+  const requiredVisible = REQUIRED_LANDMARKS.every((index) => {
+    const point = landmarks[index]
+    return point && (point.visibility ?? 1) >= MIN_VISIBILITY
+  })
+
+  if (!requiredVisible) {
+    return { aligned: false, message: '얼굴과 양쪽 어깨가 모두 보이게 앉아 주세요' }
+  }
+
+  const visible = landmarks.filter((point) => (point.visibility ?? 1) >= MIN_VISIBILITY)
+  const xs = visible.map((point) => point.x)
+  const ys = visible.map((point) => point.y)
+  const minX = Math.min(...xs)
+  const maxX = Math.max(...xs)
+  const minY = Math.min(...ys)
+  const maxY = Math.max(...ys)
+  const centerX = (minX + maxX) / 2
+  const inFrame = minX >= 0.08 && maxX <= 0.92 && minY >= 0.04 && maxY <= 0.98
+  const centered = centerX >= 0.3 && centerX <= 0.7
+
+  if (!inFrame || !centered) {
+    return { aligned: false, message: '실루엣 중앙에 상반신을 맞춰 주세요' }
+  }
+
+  return { aligned: true, message: '좋아요. 이 위치를 유지해 주세요' }
+}
 
 // 캡처 전 바른 자세 가이드 — 인체공학 권장 자세를 우리 도해 스타일로
 const GUIDE_POINTS = [
@@ -89,10 +131,13 @@ function PostureGuideDiagram() {
 }
 
 // 캡처 가이드용 상반신 실루엣 오버레이
-function SilhouetteOverlay() {
+function SilhouetteOverlay({ poseState }) {
+  const tone = poseState?.aligned ? 'text-good' : 'text-warn1'
+  const message = poseState?.message || '실루엣에 상반신을 맞춰 주세요'
+
   return (
     <div className="pointer-events-none absolute inset-0 flex items-end justify-center">
-      <svg viewBox="0 0 200 200" className="h-[92%] text-good/70">
+      <svg viewBox="0 0 200 200" className={`h-[92%] opacity-70 ${tone}`}>
         <circle cx="100" cy="62" r="30" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="6 7" />
         <path
           d="M38 200 C38 132 68 106 100 106 C132 106 162 132 162 200"
@@ -102,8 +147,8 @@ function SilhouetteOverlay() {
           strokeDasharray="6 7"
         />
       </svg>
-      <div className="absolute bottom-3 rounded-full bg-ink/70 px-3 py-1 text-[11px] text-mid backdrop-blur">
-        실루엣에 상반신을 맞춰 주세요
+      <div className={`absolute bottom-3 rounded-full bg-ink/70 px-3 py-1 text-[11px] backdrop-blur ${tone}`}>
+        {message}
       </div>
     </div>
   )
@@ -136,31 +181,50 @@ export default function Onboarding() {
   const [step, setStep] = useState(0)
   const [count, setCount] = useState(null) // 3초 캡처 카운트다운
   const [flash, setFlash] = useState(false)
-  const [shots, setShots] = useState({ good: null, usual: null })
+  const [referencePose, setReferencePose] = useState(null)
+  const [poseState, setPoseState] = useState(null)
   const videoRef = useRef(null)
   const countRef = useRef(null)
+  const pose = usePoseLandmarker(camera.status === 'active')
 
   useEffect(() => () => clearInterval(countRef.current), [])
 
-  const snap = (kind) => {
+  // 기준 자세 캡처 화면에서만 현재 스켈레톤을 확인한다.
+  useEffect(() => {
+    if (step !== 3 || camera.status !== 'active' || pose.status !== 'ready') {
+      setPoseState(null)
+      return
+    }
+
+    const id = setInterval(() => {
+      const result = pose.detect(videoRef.current)
+      const landmarks = result?.landmarks?.[0] ?? null
+      setPoseState({ ...assessCalibrationPose(landmarks), detected: Boolean(landmarks) })
+    }, 150)
+
+    return () => clearInterval(id)
+  }, [camera.status, pose.detect, pose.status, step])
+
+  const snap = () => {
     const video = videoRef.current
     if (!video || !video.videoWidth) return
-    const canvas = document.createElement('canvas')
-    canvas.width = 320
-    canvas.height = Math.round((320 * video.videoHeight) / video.videoWidth)
-    const ctx = canvas.getContext('2d')
-    // 미리보기가 거울 모드이므로 캡처도 똑같이 뒤집는다
-    ctx.translate(canvas.width, 0)
-    ctx.scale(-1, 1)
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-    setShots((s) => ({ ...s, [kind]: canvas.toDataURL('image/jpeg', 0.75) }))
+    const result = pose.detect(video)
+    const landmarks = result?.landmarks?.[0] ?? null
+    const nextPoseState = assessCalibrationPose(landmarks)
+    if (!nextPoseState.aligned) {
+      setPoseState({ ...nextPoseState, detected: Boolean(landmarks) })
+      return
+    }
+
+    // 영상/이미지는 저장하지 않고, 캡처 시점의 스켈레톤 좌표만 보관한다.
+    setReferencePose(copyLandmarks(landmarks))
     setFlash(true)
     setTimeout(() => setFlash(false), 500)
   }
 
-  // StopSlouching 방식: 기준 자세를 3초간 보정
-  const startCapture = (kind) => {
-    if (camera.status !== 'active' || count !== null) return
+  // 기준 자세를 3초간 유지한 뒤 마지막 프레임의 스켈레톤 좌표를 저장한다.
+  const startCapture = () => {
+    if (camera.status !== 'active' || pose.status !== 'ready' || count !== null || !poseState?.aligned) return
     let n = 3
     setCount(n)
     countRef.current = setInterval(() => {
@@ -168,7 +232,7 @@ export default function Onboarding() {
       if (n <= 0) {
         clearInterval(countRef.current)
         setCount(null)
-        snap(kind)
+        snap()
       } else {
         setCount(n)
       }
@@ -176,7 +240,7 @@ export default function Onboarding() {
   }
 
   const finish = () => {
-    setCalibration({ good: shots.good, usual: shots.usual, at: '2026.8.19' })
+    setCalibration({ landmarks: referencePose, at: '2026.8.19' })
     setCalibrated(true)
     setScreen('monitor')
     resetSession()
@@ -187,8 +251,8 @@ export default function Onboarding() {
     setScreen('monitor')
   }
 
-  const captureStep = (kind, title, desc, checklist, next) => (
-    <div key={kind} className="rise grid w-full grid-cols-12 gap-6">
+  const captureStep = () => (
+    <div className="rise grid w-full grid-cols-12 gap-6">
       <div className="relative col-span-7">
         <CameraView
           videoRef={videoRef}
@@ -196,7 +260,7 @@ export default function Onboarding() {
           showControls={false}
           overlay={
             <>
-              <SilhouetteOverlay />
+              <SilhouetteOverlay poseState={poseState} />
               {count !== null && (
                 <div className="absolute inset-0 flex items-center justify-center bg-ink/40">
                   <span key={count} className="zoom-in font-mono text-8xl font-semibold text-hi drop-shadow-lg">
@@ -211,39 +275,50 @@ export default function Onboarding() {
       </div>
       <div className="col-span-5 flex flex-col">
         <MicroLabel>Calibration</MicroLabel>
-        <h2 className="mt-2 text-2xl font-bold tracking-tight">{title}</h2>
-        <p className="mt-2 text-sm leading-relaxed text-mid">{desc}</p>
+        <h2 className="mt-2 text-2xl font-bold tracking-tight">실제 사용할 자세를 보여주세요</h2>
+        <p className="mt-2 text-sm leading-relaxed text-mid">
+          앞으로 모니터링할 때 유지할 자세로 앉아 주세요. 실루엣 안에 위치를 맞추면 한 번 캡처하고 스켈레톤 좌표만 기준으로 저장해요.
+        </p>
         <ul className="mt-5 flex flex-col gap-2.5">
-          {checklist.map((c) => (
+          {['귀 — 어깨 — 골반이 일직선', '어깨는 뒤로, 힘은 빼고', '화면과 팔 길이만큼 거리'].map((c) => (
             <li key={c} className="flex items-start gap-2.5 text-sm text-mid">
               <Icon name="check" size={15} className="mt-0.5 shrink-0 text-good" />
               {c}
             </li>
           ))}
         </ul>
+        <Card className="mt-5 border-good/20 bg-good/[0.05] p-3.5 text-xs leading-relaxed text-mid">
+          <div className="flex items-center gap-2 text-good">
+            <Icon name="activity" size={14} />
+            <span className="font-medium">{pose.status === 'loading' ? '자세 모델 로딩 중…' : pose.status === 'error' ? '자세 모델을 불러오지 못했어요' : poseState?.detected ? '스켈레톤 인식 중' : '카메라 안에 상반신을 보여 주세요'}</span>
+          </div>
+          <p className="mt-1.5">사진이나 영상은 저장하지 않고, 인식된 관절 좌표만 기준 자세로 사용합니다.</p>
+        </Card>
         <div className="mt-auto flex flex-col gap-3 pt-6">
-          {shots[kind] ? (
+          {referencePose ? (
             <div className="flex items-center gap-3">
-              <img src={shots[kind]} alt="" className="h-16 w-24 rounded-lg border border-good/40 object-cover" />
+              <div className="flex h-16 w-24 items-center justify-center rounded-lg border border-good/40 bg-good/10">
+                <PostureFigure state="good" className="h-10 w-10 text-good" />
+              </div>
               <div className="flex items-center gap-1.5 text-sm text-good">
                 <Icon name="check" size={15} />
-                캡처 완료
+                좌표 저장 완료
               </div>
-              <Btn size="sm" kind="ghost" className="ml-auto" onClick={() => startCapture(kind)}>
+              <Btn size="sm" kind="ghost" className="ml-auto" onClick={startCapture}>
                 다시 찍기
               </Btn>
             </div>
           ) : (
-            <Btn kind="primary" onClick={() => startCapture(kind)} disabled={camera.status !== 'active' || count !== null}>
+            <Btn kind="primary" onClick={startCapture} disabled={camera.status !== 'active' || pose.status !== 'ready' || !poseState?.aligned || count !== null}>
               <Icon name="camera" size={16} />
-              {count !== null ? '캡처 중…' : '3초 캡처 시작'}
+              {count !== null ? '캡처 중…' : '기준 자세 캡처'}
             </Btn>
           )}
           <div className="flex gap-2">
             <Btn kind="ghost" onClick={() => setStep(step - 1)}>
               이전
             </Btn>
-            <Btn kind="outline" className="flex-1" disabled={!shots[kind]} onClick={next}>
+            <Btn kind="outline" className="flex-1" disabled={!referencePose} onClick={() => setStep(4)}>
               다음
               <Icon name="chevronRight" size={15} />
             </Btn>
@@ -383,24 +458,9 @@ export default function Onboarding() {
         )}
 
         {step === 3 &&
-          captureStep(
-            'good',
-            '바른 자세를 3초간 보여주세요',
-            '이 자세가 당신의 기준점이 됩니다. 방금 본 가이드대로, 지금 할 수 있는 가장 바른 자세로 앉아 주세요.',
-            ['귀 — 어깨 — 골반이 일직선', '어깨는 뒤로, 힘은 빼고', '화면과 팔 길이만큼 거리'],
-            () => setStep(4),
-          )}
+          captureStep()}
 
-        {step === 4 &&
-          captureStep(
-            'usual',
-            '이번엔 평소처럼 앉아 보세요',
-            '기준 자세와의 차이로 감지 민감도를 잡아요. 잘 보이려고 하지 말고, 평소처럼. 솔직할수록 정확해져요.',
-            ['방금 전까지 일하던 그 자세로', '모니터를 보며 자연스럽게', '10초 뒤를 상상하면 쉬워요'],
-            () => setStep(5),
-          )}
-
-        {step === 5 && (
+        {step === 4 && (
           <div className="rise flex w-full max-w-2xl flex-col items-center text-center">
             <span className="flex h-16 w-16 items-center justify-center rounded-full border border-good/40 bg-good/10">
               <Icon name="check" size={28} className="text-good" />
@@ -409,26 +469,24 @@ export default function Onboarding() {
             <p className="mt-2 text-sm text-mid">이제 이 기준으로 하루 종일 조용히 지켜볼게요.</p>
 
             <Card className="mt-8 w-full p-6">
-              <div className="flex items-center justify-center gap-6">
-                {['good', 'usual'].map((k) => (
-                  <div key={k} className="flex flex-col items-center gap-2">
-                    {shots[k] ? (
-                      <img src={shots[k]} alt="" className="h-24 w-36 rounded-lg border border-line-strong object-cover" />
-                    ) : (
-                      <div className="flex h-24 w-36 items-center justify-center rounded-lg border border-dashed border-line-strong text-[11px] text-dim">
-                        건너뜀
-                      </div>
-                    )}
-                    <MicroLabel>{k === 'good' ? '바른 자세' : '평소 자세'}</MicroLabel>
+              <div className="flex items-center justify-center gap-4">
+                <div className="flex h-24 w-36 items-center justify-center rounded-lg border border-good/40 bg-good/10">
+                  <PostureFigure state="good" className="h-16 w-16 text-good" />
+                </div>
+                <div className="text-left">
+                  <div className="flex items-center gap-1.5 text-sm text-good">
+                    <Icon name="check" size={15} />
+                    기준 스켈레톤 저장 완료
                   </div>
-                ))}
+                  <p className="mt-1 text-xs text-mid">관절 {referencePose?.length ?? 0}개 좌표를 저장했어요.</p>
+                </div>
               </div>
               <div className="mt-5 grid grid-cols-2 gap-3 border-t border-line pt-5 text-left">
                 <div className="text-xs text-mid">
-                  <span className="font-mono text-warn1">머리 +5.2cm</span> — 평소 자세에서 머리가 기준보다 앞으로
+                  <span className="font-mono text-good">스켈레톤 좌표</span> — 기준 자세의 관절 위치만 저장
                 </div>
                 <div className="text-xs text-mid">
-                  <span className="font-mono text-warn1">어깨 높이차 1.1cm</span> — 오른쪽이 살짝 낮아요
+                  <span className="font-mono text-good">실루엣 고정</span> — 모니터링 시 같은 위치를 기준으로 비교
                 </div>
               </div>
               <p className="mt-4 rounded-lg bg-white/[0.03] p-3 text-left text-xs leading-relaxed text-mid">

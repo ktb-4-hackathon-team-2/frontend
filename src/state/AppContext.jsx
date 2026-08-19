@@ -50,7 +50,7 @@ export function AppProvider({ children }) {
   )
 
   const [calibrated, setCalibrated] = useState(false)
-  const [calibration, setCalibration] = useState(null) // { good, usual, at }
+  const [calibration, setCalibration] = useState(null) // { landmarks, at }
   const [posture, setPosture] = useState('good')
   const [paused, setPaused] = useState(false)
   const [demoAlert, setDemoAlert] = useState(0) // 알림 데모용 강제 단계 (0 = 없음)
