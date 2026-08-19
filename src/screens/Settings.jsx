@@ -1,0 +1,182 @@
+import { useApp } from '../state/AppContext'
+import { Btn, Card, Icon, MicroLabel, ScreenHeader, Toggle } from '../components/ui'
+import { fmtClock } from '../lib/format'
+import { playChime } from '../lib/sound'
+
+const ALERT_LEVELS = [
+  { value: 1, name: '1단계까지', desc: '위젯 신호만 — 가장 조용해요' },
+  { value: 2, name: '2단계까지', desc: '위젯 + 토스트 (기본)', badge: '기본' },
+  { value: 3, name: '3단계까지', desc: '전체 화면 개입 포함 — 강한 개입이에요', optIn: true },
+]
+
+const SOUNDS = [
+  { value: 'chime', name: '차임' },
+  { value: 'wood', name: '우드' },
+  { value: 'none', name: '무음' },
+]
+
+function Row({ label, desc, children }) {
+  return (
+    <div className="flex items-center justify-between gap-6 py-4">
+      <div className="min-w-0">
+        <div className="text-sm font-medium">{label}</div>
+        {desc && <div className="mt-0.5 text-xs leading-relaxed text-dim">{desc}</div>}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">{children}</div>
+    </div>
+  )
+}
+
+export default function Settings() {
+  const { settings, updateSetting, setCalibrated, stretchLeft, setStretchSuggest, calibration } = useApp()
+
+  return (
+    <div className="max-w-3xl">
+      <ScreenHeader title="설정" desc="개입은 딱 필요한 만큼만. 나머지는 반듯이 알아서." />
+
+      {/* 알림 */}
+      <Card className="rise d1 mb-4 px-6 py-2">
+        <div className="border-b border-line py-4">
+          <MicroLabel>알림</MicroLabel>
+          <div className="mt-4 grid grid-cols-3 gap-2.5">
+            {ALERT_LEVELS.map((l) => {
+              const active = settings.maxAlertLevel === l.value
+              return (
+                <button
+                  key={l.value}
+                  onClick={() => updateSetting('maxAlertLevel', l.value)}
+                  className={`cursor-pointer rounded-xl border p-3.5 text-left transition-all ${
+                    active
+                      ? l.optIn
+                        ? 'border-warn3/50 bg-warn3/[0.07]'
+                        : 'border-good/50 bg-good/[0.07]'
+                      : 'border-line hover:border-line-strong'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className={`text-sm font-semibold ${active ? 'text-hi' : 'text-mid'}`}>{l.name}</span>
+                    {l.badge && <span className="rounded bg-white/[0.07] px-1.5 py-0.5 text-[10px] text-dim">{l.badge}</span>}
+                    {active && <Icon name="check" size={14} className={l.optIn ? 'text-warn3' : 'text-good'} />}
+                  </div>
+                  <div className="mt-1 text-[11px] leading-relaxed text-dim">{l.desc}</div>
+                </button>
+              )
+            })}
+          </div>
+          {settings.maxAlertLevel >= 3 && (
+            <p className="mt-3 flex items-center gap-2 rounded-lg bg-warn3/[0.07] px-3.5 py-2.5 text-xs text-warn3">
+              <Icon name="alert" size={13} />
+              3단계는 화면 전체를 덮는 강한 개입이에요. 회의·발표 중엔 일시정지를 활용하세요.
+            </p>
+          )}
+        </div>
+
+        <div className="border-b border-line">
+          <Row label="알림음" desc="2단계 이상 알림에서 재생돼요">
+            <div className="flex overflow-hidden rounded-lg border border-line">
+              {SOUNDS.map((s) => (
+                <button
+                  key={s.value}
+                  onClick={() => {
+                    updateSetting('sound', s.value)
+                    updateSetting('soundOn', s.value !== 'none')
+                    playChime(s.value)
+                  }}
+                  className={`cursor-pointer px-3.5 py-1.5 text-xs transition-colors ${
+                    settings.sound === s.value ? 'bg-white/[0.08] font-medium text-hi' : 'text-dim hover:text-mid'
+                  }`}
+                >
+                  {s.name}
+                </button>
+              ))}
+            </div>
+            <Btn size="sm" kind="ghost" onClick={() => playChime(settings.sound)} disabled={settings.sound === 'none'}>
+              <Icon name="volume" size={13} />
+              미리 듣기
+            </Btn>
+          </Row>
+        </div>
+
+        <Row label="조용한 시간대" desc="이 시간엔 소리 없이 위젯으로만 알려요">
+          {settings.quietOn && (
+            <div className="flex items-center gap-1.5 font-mono text-xs text-mid">
+              <input
+                type="time"
+                value={settings.quietFrom}
+                onChange={(e) => updateSetting('quietFrom', e.target.value)}
+                className="rounded-lg border border-line bg-raised px-2 py-1.5 outline-none focus:border-good/50"
+              />
+              –
+              <input
+                type="time"
+                value={settings.quietTo}
+                onChange={(e) => updateSetting('quietTo', e.target.value)}
+                className="rounded-lg border border-line bg-raised px-2 py-1.5 outline-none focus:border-good/50"
+              />
+            </div>
+          )}
+          <Toggle on={settings.quietOn} onChange={(v) => updateSetting('quietOn', v)} />
+        </Row>
+      </Card>
+
+      {/* 스트레칭 */}
+      <Card className="rise d2 mb-4 px-6 py-2">
+        <div className="py-2">
+          <MicroLabel className="pt-2">스트레칭</MicroLabel>
+        </div>
+        <Row label="제안 주기" desc="바른 자세여도 정기적으로 몸을 풀어주는 게 좋아요">
+          <div className="flex items-center gap-1">
+            <Btn
+              size="sm"
+              kind="ghost"
+              disabled={settings.stretchMin <= 30}
+              onClick={() => updateSetting('stretchMin', settings.stretchMin - 10)}
+            >
+              −
+            </Btn>
+            <span className="w-16 text-center font-mono text-sm font-semibold">{settings.stretchMin}분</span>
+            <Btn
+              size="sm"
+              kind="ghost"
+              disabled={settings.stretchMin >= 90}
+              onClick={() => updateSetting('stretchMin', settings.stretchMin + 10)}
+            >
+              +
+            </Btn>
+          </div>
+        </Row>
+        <div className="border-t border-line">
+          <Row label="다음 제안" desc={`${fmtClock(stretchLeft)} 뒤에 제안할 예정이에요`}>
+            <Btn size="sm" kind="ghost" onClick={() => setStretchSuggest(true)}>
+              지금 제안 받기
+            </Btn>
+          </Row>
+        </div>
+      </Card>
+
+      {/* 캘리브레이션 */}
+      <Card className="rise d3 mb-4 px-6 py-2">
+        <div className="py-2">
+          <MicroLabel className="pt-2">캘리브레이션</MicroLabel>
+        </div>
+        <Row
+          label="기준 자세"
+          desc={`${calibration?.at || '2026.8.19'} 촬영 · 데이터는 이 기기에만 저장돼요`}
+        >
+          <Btn size="sm" kind="outline" onClick={() => setCalibrated(false)}>
+            <Icon name="refresh" size={13} />
+            재캘리브레이션
+          </Btn>
+        </Row>
+      </Card>
+
+      <Card className="rise d4 flex items-start gap-3 border-dashed px-6 py-4">
+        <Icon name="wrench" size={15} className="mt-0.5 shrink-0 text-dim" />
+        <p className="text-xs leading-relaxed text-dim">
+          프로토타입 범위 — 자세 판정(MediaPipe)·서버·계정은 아직 없어요. 자세 상태는 좌측 하단 DEV 패널로
+          시뮬레이션하고, 점수와 리포트는 더미 데이터예요.
+        </p>
+      </Card>
+    </div>
+  )
+}

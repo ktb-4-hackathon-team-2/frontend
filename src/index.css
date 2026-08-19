@@ -1,0 +1,118 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "IBM Plex Sans KR", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* 지면 */
+  --color-ink: #0b0d0e;
+  --color-surface: #121517;
+  --color-raised: #191d20;
+  --color-line: rgb(255 255 255 / 0.07);
+  --color-line-strong: rgb(255 255 255 / 0.16);
+
+  /* 잉크 */
+  --color-hi: #e9edeb;
+  --color-mid: #a3ada7;
+  --color-dim: #5c665f;
+
+  /* 상태 — 항상 아이콘·라벨·단계 도트와 함께 사용 (색 단독 금지) */
+  --color-good: #3ec98f;
+  --color-warn1: #e6b345;
+  --color-warn2: #ef8b4e;
+  --color-warn3: #e0393e;
+
+  /* 차트 계열 — validate_palette.js 통과 조합 (dark surface #121517) */
+  --color-viz1: #2aa274;
+  --color-viz2: #5e87c9;
+}
+
+@layer base {
+  body {
+    background: var(--color-ink);
+    color: var(--color-hi);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  ::selection {
+    background: rgb(62 201 143 / 0.25);
+  }
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-thumb { background: rgb(255 255 255 / 0.1); border-radius: 8px; border: 2px solid var(--color-ink); }
+  *::-webkit-scrollbar-track { background: transparent; }
+  input[type="time"] { color-scheme: dark; }
+  select { color-scheme: dark; }
+}
+
+/* 은은한 배경 분위기 — 하루 종일 떠 있는 앱이므로 조용하게 */
+.app-bg {
+  background:
+    radial-gradient(1100px 700px at 75% -10%, rgb(62 201 143 / 0.05), transparent 60%),
+    radial-gradient(900px 600px at -5% 105%, rgb(94 135 201 / 0.045), transparent 55%),
+    var(--color-ink);
+}
+
+/* 경고 3단계 오버레이의 위험 스트라이프 */
+.hazard {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--color-warn3) 0 14px,
+    transparent 14px 28px
+  );
+}
+
+/* 진입 모션 — 화면 전환 시 순차 등장 */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+.rise { animation: rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.d1 { animation-delay: 0.05s; }
+.d2 { animation-delay: 0.1s; }
+.d3 { animation-delay: 0.16s; }
+.d4 { animation-delay: 0.22s; }
+.d5 { animation-delay: 0.28s; }
+.d6 { animation-delay: 0.34s; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(18px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+.toast-in { animation: toast-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.overlay-in { animation: overlay-in 0.3s ease-out both; }
+
+@keyframes zoom-in {
+  from { opacity: 0; transform: scale(0.93); }
+  to { opacity: 1; transform: none; }
+}
+.zoom-in { animation: zoom-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+@keyframes flash {
+  from { opacity: 0.85; }
+  to { opacity: 0; }
+}
+.flash { animation: flash 0.5s ease-out both; }
+
+@keyframes blink-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+.blink-dot { animation: blink-dot 1.6s ease-in-out infinite; }
+
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+.breathe { animation: breathe 2.4s ease-in-out infinite; }
+
+@keyframes ring-ping {
+  0% { transform: scale(1); opacity: 0.7; }
+  100% { transform: scale(1.45); opacity: 0; }
+}
+.ring-ping { animation: ring-ping 1.4s cubic-bezier(0, 0, 0.2, 1) infinite; }
