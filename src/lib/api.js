@@ -56,7 +56,7 @@ export const api = {
   /** GET /api/me — 저장된 토큰 검증 겸용 */
   me: (token) => request('/api/me', { token }),
 
-  // ── 📊 리포트 & 통계 API ──────────────────────────────────────────
+  // ── 리포트 & 통계 API ──────────────────────────────────────────
   /** GET /api/reports/dashboard — 레포트 화면 전체 대시보드 (14일 추이, 시간대별) */
   getReportDashboard: (token) => request('/api/reports/dashboard', { token }),
 

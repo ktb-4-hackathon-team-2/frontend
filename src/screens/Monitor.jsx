@@ -73,7 +73,7 @@ export default function Monitor() {
     meta, posture, paused, setPaused, postureSinceSec,
     alertCount, elapsedSec, stretchLeft, settings, camera, tick,
     startStretchNow, postponeStretch, localDetection, endMonitoring,
-    detectionVideoRef, pose,
+    detectionVideoRef, pose, cameraView,
   } = useApp()
   const overlayRef = useRef(null)
 
@@ -184,7 +184,11 @@ export default function Monitor() {
       <Card className="rise d2 col-span-5 flex flex-col p-5">
         <div className="mb-4 flex items-center justify-between">
           <MicroLabel>카메라</MicroLabel>
-          <span className="text-[11px] text-dim">영상은 기기 밖으로 나가지 않아요</span>
+          <div className="flex items-center gap-1.5">
+            <span className="rounded bg-white/[0.06] border border-line px-2 py-0.5 text-[10px] font-mono text-mid">
+              {cameraView === 'front' ? '정면 뷰' : cameraView === 'left_diagonal' ? '좌측 대각 뷰' : '우측 대각 뷰'}
+            </span>
+          </div>
         </div>
         <CameraView
           className="aspect-[4/3]"
