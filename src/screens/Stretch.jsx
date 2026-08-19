@@ -365,11 +365,13 @@ export default function Stretch() {
     }
   }, [pendingStretchId, clearPendingStretch])
 
-  // 온디바이스 판정에서 방금 감지된 issue code로, 없으면 취약 부위 매핑으로 추천
+  // 온디바이스 판정에서 방금 감지된 issue code로, 없으면 취약 부위 매핑으로 추천.
+  // AI 서버 recommend와 같은 방식: 겹치는 문제 개수가 많은 순으로 정렬.
   const liveIssues = localDetection.issues?.length ? localDetection.issues : null
   const issueSet = liveIssues ?? REGION_TO_ISSUES[weakestRegion(posture)] ?? []
-  const isRecommended = (s) => s.targets.some((t) => issueSet.includes(t))
-  const sorted = [...STRETCHES].sort((a, b) => Number(isRecommended(b)) - Number(isRecommended(a)))
+  const matchCount = (s) => s.targets.filter((t) => issueSet.includes(t)).length
+  const isRecommended = (s) => matchCount(s) > 0
+  const sorted = [...STRETCHES].sort((a, b) => matchCount(b) - matchCount(a))
 
   if (active) return <ActiveSession stretch={active} onExit={() => setActiveId(null)} />
 

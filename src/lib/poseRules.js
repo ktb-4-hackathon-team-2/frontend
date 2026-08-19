@@ -57,14 +57,15 @@ function neckSide(direction) {
     const p = baseParts(lm)
     if (!p) return notVisible()
     const t = direction === 'left' ? p.tilt : -p.tilt
+    // 기울기 임계 13°: AI 서버(core/stretch.py)와 동일. 어깨 수평은 프론트 추가 가드.
     const conds = [
       cond('vis', '어깨까지 프레임 안에', true),
-      cond('tilt', `머리를 ${label}쪽으로 깊게 (16° 이상)`, t >= 16, `${Math.max(0, t).toFixed(0)}°`),
+      cond('tilt', `머리를 ${label}쪽으로 깊게 (13° 이상)`, t >= 13, `${Math.max(0, t).toFixed(0)}°`),
       cond('level', '어깨는 수평 유지', Math.abs(p.shoulderAngle) <= 12, `${Math.abs(p.shoulderAngle).toFixed(0)}°`),
     ]
     let hint = null
     if (t <= -10) hint = `반대쪽이에요 — ${label}쪽으로 기울여 주세요`
-    else if (t < 16) hint = '귀가 어깨에 닿는다는 느낌으로 조금 더'
+    else if (t < 13) hint = '귀가 어깨에 닿는다는 느낌으로 조금 더'
     else if (Math.abs(p.shoulderAngle) > 12) hint = '어깨가 따라 올라갔어요 — 힘을 빼세요'
     return pack(conds, hint)
   }
@@ -72,19 +73,28 @@ function neckSide(direction) {
 
 // ── 어깨 으쓱하기 ────────────────────────────────────────────────────
 // 세션 중 관찰된 "가장 이완된 상태"(귀-어깨 거리 최대)를 기준으로 상승률을 계산한다.
+// 세션 중 가장 이완된 상태(귀-어깨 거리 최대)를 기준으로 상승률을 재는 적응형 방식.
+// AI 서버는 고정 기준값을 쓰므로 방식이 다름 — 어느 쪽으로 통일할지 AI팀과 결정 필요.
+// 콜드스타트 방어: 세션 시작 직후엔 기준이 없으므로 1초(10샘플) 관찰 후부터 판정한다.
 function shoulderShrug(lm, ctx) {
   const p = baseParts(lm)
   if (!p) return notVisible()
   const r = (p.shoulderMid.y - p.earMid.y) / p.sw
   const ref = ctx?.ref ?? {}
   ref.maxR = Math.max(ref.maxR ?? 0, r)
-  const lift = ref.maxR > 0.2 ? 1 - r / ref.maxR : 0
-  const lifted = lift >= 0.18
+  ref.samples = (ref.samples ?? 0) + 1
+  const warmedUp = ref.samples >= 10 && ref.maxR > 0.2
+  const lift = warmedUp ? 1 - r / ref.maxR : 0
+  const lifted = warmedUp && lift >= 0.18
   const conds = [
     cond('vis', '어깨까지 프레임 안에', true),
-    cond('lift', '어깨를 귀 쪽으로 으쓱', lifted, `${Math.round(lift * 100)}%`),
+    cond('lift', '어깨를 귀 쪽으로 으쓱', lifted, warmedUp ? `${Math.round(lift * 100)}%` : null),
   ]
-  const hint = lifted ? null : '양어깨를 귀에 닿을 만큼 끌어올려 보세요'
+  const hint = !warmedUp
+    ? '잠시 편안히 앉아 주세요 — 기준을 잡는 중이에요'
+    : lifted
+      ? null
+      : '양어깨를 귀에 닿을 만큼 끌어올려 보세요'
   return pack(conds, hint)
 }
 
@@ -98,16 +108,17 @@ function chestOpener(lm) {
       '양팔을 벌린 손이 화면에 보이게 조금 뒤로 앉아 주세요',
     )
   }
+  // 벌림 임계 1.7배: AI 서버와 동일. 어깨 높이는 프론트 추가 가드.
   const spread = Math.abs(p.lw.x - p.rw.x) / p.sw
   const heightOk =
     Math.abs(p.lw.y - p.shoulderMid.y) <= 0.6 * p.sw && Math.abs(p.rw.y - p.shoulderMid.y) <= 0.6 * p.sw
   const conds = [
     cond('vis', '어깨까지 프레임 안에', true),
-    cond('spread', '양팔을 옆으로 넓게 (어깨너비 2배)', spread >= 2.1, `${spread.toFixed(1)}배`),
+    cond('spread', '양팔을 옆으로 넓게 (어깨너비 1.7배)', spread >= 1.7, `${spread.toFixed(1)}배`),
     cond('height', '손은 어깨 높이에서 유지', heightOk),
   ]
   let hint = null
-  if (spread < 2.1) hint = '팔을 조금 더 넓게 펼쳐 주세요'
+  if (spread < 1.7) hint = '팔을 조금 더 넓게 펼쳐 주세요'
   else if (!heightOk) hint = '손 높이를 어깨 높이에 맞춰 주세요'
   return pack(conds, hint)
 }
@@ -139,8 +150,9 @@ function chinTuck(lm, ctx) {
 function armsUp(lm) {
   const p = baseParts(lm)
   if (!p) return notVisible()
+  // 손목이 코보다 위: AI 서버와 동일 기준 (여유 마진 제거). 몸통 수평은 프론트 추가 가드.
   const handsVisible = vis(p.lw) && vis(p.rw)
-  const up = handsVisible && p.lw.y < p.nose.y - 0.03 && p.rw.y < p.nose.y - 0.03
+  const up = handsVisible && p.lw.y < p.nose.y && p.rw.y < p.nose.y
   const conds = [
     cond('vis', '어깨까지 프레임 안에', true),
     cond('up', '양손을 머리 위로', up),

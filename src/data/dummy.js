@@ -148,7 +148,7 @@ export const STRETCHES = [
     id: 'arms_up',
     name: '팔 위로 뻗기',
     hold: 8,
-    targets: ['head_down', 'shift_x'],
+    targets: ['head_down', 'shift_x', 'lean_in'], // lean_in: AI 서버 카탈로그와 동일하게 복원
     steps: ['양팔을 귀 옆까지 곧게 뻗어 올립니다', '손끝을 하늘로 민다는 느낌으로', '몸통이 좌우로 기울지 않게 유지합니다'],
   },
 ]
