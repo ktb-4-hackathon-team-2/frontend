@@ -46,8 +46,9 @@ export default function Monitor() {
   const {
     meta, posture, paused, setPaused, postureSinceSec,
     alertCount, elapsedSec, stretchLeft, settings, camera, tick,
-    startStretchNow, postponeStretch, localDetection,
+    startStretchNow, postponeStretch, localDetection, aiEnabled,
   } = useApp()
+  const engine = aiEnabled ? 'AI Server' : 'Local MediaPipe'
   const tone = TONE[meta.tone]
   const stretchTotal = settings.stretchMin * 60
   const stretchProgress = 1 - stretchLeft / stretchTotal
@@ -124,7 +125,13 @@ export default function Monitor() {
             LOOP {DETECT_INTERVAL_MS}ms · TICK {tick.toLocaleString()}
           </span>
           <span className="ml-auto text-[11px] text-dim">
-            {localDetection.status === 'tracking' ? 'Local MediaPipe · 인식 중' : localDetection.status === 'loading' ? 'Local MediaPipe · 로딩 중' : 'Local MediaPipe · 대기'}
+            {localDetection.status === 'tracking'
+              ? `${engine} · 인식 중`
+              : localDetection.status === 'loading'
+                ? `${engine} · 로딩 중`
+                : localDetection.status === 'error'
+                  ? `${engine} · 연결 실패`
+                  : `${engine} · 대기`}
           </span>
         </div>
       </Card>

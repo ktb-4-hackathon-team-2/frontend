@@ -1,10 +1,8 @@
-// 방식 1: 관절 각도 룰 기반 스트레칭 판정.
-// 스트레칭마다 목표 자세를 몇 개의 각도 조건으로 정의하고,
-// 전부 충족한 상태를 HOLD_MS 동안 유지하면 한 세트로 센다.
+// 스트레칭 동작 판정 룰 (관절 각도·위치 기반, 브라우저 로컬).
+// 각 룰은 (landmarks, ctx) → { conds, all, hint } 를 반환하고,
+// 조건을 모두 만족한 채 hold 시간을 유지하면 한 동작 완료로 센다.
+// prod(AI 서버 모드)에서는 /api/stretch/session/{id}/frame 판정으로 대체될 자리.
 
-export const HOLD_MS = 4000
-
-// PoseLandmarker 랜드마크 인덱스 (person 기준 left/right)
 const LM = {
   nose: 0,
   leftEar: 7,
@@ -20,59 +18,126 @@ const LM = {
 }
 
 const deg = (rad) => (rad * 180) / Math.PI
+const lineAngle = (a, b) => deg(Math.atan2(b.y - a.y, b.x - a.x))
+const vis = (p) => Boolean(p) && (p.visibility ?? 1) > 0.5
+const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y)
 
-// 두 랜드마크를 잇는 선이 수평과 이루는 각도 (이미지 좌표계, y는 아래로 증가)
-function lineAngle(a, b) {
-  return deg(Math.atan2(b.y - a.y, b.x - a.x))
-}
+const cond = (id, label, ok, value = null) => ({ id, label, ok, value })
+const pack = (conds, hint) => ({ conds, all: conds.every((c) => c.ok), hint })
+const notVisible = () =>
+  pack([cond('vis', '상반신이 프레임 안에', false)], '카메라에 얼굴과 어깨가 보이게 앉아 주세요')
 
-const vis = (p) => (p.visibility ?? 1) > 0.5
-
-// ── 목 옆 늘리기 ─────────────────────────────────────────────────────
-// 어깨 선 기준 머리(귀 선)의 상대 기울기로 판정. 좌우를 번갈아 해야 다음 세트로 넘어간다.
-// 미러 여부와 무관하도록 절대 방향(왼쪽/오른쪽)은 지시하지 않고 "반대쪽"만 요구한다.
-function evalNeckSide(lm, { lastSide, rep }) {
-  const le = lm[LM.leftEar]
-  const re = lm[LM.rightEar]
+function baseParts(lm) {
+  if (!lm) return null
   const ls = lm[LM.leftShoulder]
   const rs = lm[LM.rightShoulder]
-  const visible = [le, re, ls, rs].every(vis)
-
-  const headAngle = lineAngle(re, le)
-  const shoulderAngle = lineAngle(rs, ls)
-  const tilt = headAngle - shoulderAngle // 어깨 기준 상대 기울기
-  const side = tilt > 0 ? 'a' : 'b'
-  const needOpposite = rep > 1 && lastSide != null
-
-  const conds = [
-    { id: 'visible', label: '어깨까지 프레임 안에', ok: visible },
-    {
-      id: 'tilt',
-      label: '머리를 옆으로 깊게 (18° 이상)',
-      ok: visible && Math.abs(tilt) >= 18,
-      value: visible ? `${Math.abs(tilt).toFixed(0)}°` : null,
-    },
-    {
-      id: 'shoulder',
-      label: '어깨는 수평 유지 (10° 이내)',
-      ok: visible && Math.abs(shoulderAngle) <= 10,
-      value: visible ? `${Math.abs(shoulderAngle).toFixed(0)}°` : null,
-    },
-    ...(needOpposite ? [{ id: 'switch', label: '이전과 반대쪽으로', ok: side !== lastSide }] : []),
-  ]
-
-  let hint = null
-  if (!visible) hint = '카메라에 어깨까지 나오게 앉아 주세요'
-  else if (needOpposite && side === lastSide && Math.abs(tilt) >= 18) hint = '이번엔 반대쪽으로 기울여 주세요'
-  else if (Math.abs(tilt) < 18) hint = '귀가 어깨에 닿는다는 느낌으로 조금 더'
-  else if (Math.abs(shoulderAngle) > 10) hint = '어깨가 따라 올라갔어요 — 힘을 빼세요'
-
-  return { conds, all: conds.every((c) => c.ok), side, hint }
+  const le = lm[LM.leftEar]
+  const re = lm[LM.rightEar]
+  if (![ls, rs, le, re].every(vis)) return null
+  return {
+    ls, rs, le, re,
+    nose: lm[LM.nose],
+    lw: lm[LM.leftWrist],
+    rw: lm[LM.rightWrist],
+    sw: Math.max(dist(ls, rs), 0.05),
+    shoulderAngle: lineAngle(rs, ls),
+    // 어깨 기준 머리(귀 선) 상대 기울기 — 양수 = 사람 기준 왼쪽으로 기울임
+    tilt: lineAngle(re, le) - lineAngle(rs, ls),
+    shoulderMid: mid(ls, rs),
+    earMid: mid(le, re),
+  }
 }
 
-// 실시간 판정을 지원하는 스트레칭 목록 (정면 웹캠으로 판정 가능한 동작만)
-export const POSE_RULES = {
-  neckside: evalNeckSide,
+// ── 목 옆 늘리기 (왼/오) ─────────────────────────────────────────────
+// 거울 미리보기에서 사람 기준 방향과 화면에 보이는 방향이 일치한다.
+function neckSide(direction) {
+  const label = direction === 'left' ? '왼' : '오른'
+  return (lm) => {
+    const p = baseParts(lm)
+    if (!p) return notVisible()
+    const t = direction === 'left' ? p.tilt : -p.tilt
+    const conds = [
+      cond('vis', '어깨까지 프레임 안에', true),
+      cond('tilt', `머리를 ${label}쪽으로 깊게 (16° 이상)`, t >= 16, `${Math.max(0, t).toFixed(0)}°`),
+      cond('level', '어깨는 수평 유지', Math.abs(p.shoulderAngle) <= 12, `${Math.abs(p.shoulderAngle).toFixed(0)}°`),
+    ]
+    let hint = null
+    if (t <= -10) hint = `반대쪽이에요 — ${label}쪽으로 기울여 주세요`
+    else if (t < 16) hint = '귀가 어깨에 닿는다는 느낌으로 조금 더'
+    else if (Math.abs(p.shoulderAngle) > 12) hint = '어깨가 따라 올라갔어요 — 힘을 빼세요'
+    return pack(conds, hint)
+  }
+}
+
+// ── 어깨 으쓱하기 ────────────────────────────────────────────────────
+// 세션 중 관찰된 "가장 이완된 상태"(귀-어깨 거리 최대)를 기준으로 상승률을 계산한다.
+function shoulderShrug(lm, ctx) {
+  const p = baseParts(lm)
+  if (!p) return notVisible()
+  const r = (p.shoulderMid.y - p.earMid.y) / p.sw
+  const ref = ctx?.ref ?? {}
+  ref.maxR = Math.max(ref.maxR ?? 0, r)
+  const lift = ref.maxR > 0.2 ? 1 - r / ref.maxR : 0
+  const lifted = lift >= 0.18
+  const conds = [
+    cond('vis', '어깨까지 프레임 안에', true),
+    cond('lift', '어깨를 귀 쪽으로 으쓱', lifted, `${Math.round(lift * 100)}%`),
+  ]
+  const hint = lifted ? null : '양어깨를 귀에 닿을 만큼 끌어올려 보세요'
+  return pack(conds, hint)
+}
+
+// ── 가슴 열기 (양팔 벌리기) ──────────────────────────────────────────
+function chestOpener(lm) {
+  const p = baseParts(lm)
+  if (!p) return notVisible()
+  if (!vis(p.lw) || !vis(p.rw)) {
+    return pack(
+      [cond('vis', '어깨까지 프레임 안에', true), cond('hands', '양손이 화면 안에', false)],
+      '양팔을 벌린 손이 화면에 보이게 조금 뒤로 앉아 주세요',
+    )
+  }
+  const spread = Math.abs(p.lw.x - p.rw.x) / p.sw
+  const heightOk =
+    Math.abs(p.lw.y - p.shoulderMid.y) <= 0.6 * p.sw && Math.abs(p.rw.y - p.shoulderMid.y) <= 0.6 * p.sw
+  const conds = [
+    cond('vis', '어깨까지 프레임 안에', true),
+    cond('spread', '양팔을 옆으로 넓게 (어깨너비 2배)', spread >= 2.1, `${spread.toFixed(1)}배`),
+    cond('height', '손은 어깨 높이에서 유지', heightOk),
+  ]
+  let hint = null
+  if (spread < 2.1) hint = '팔을 조금 더 넓게 펼쳐 주세요'
+  else if (!heightOk) hint = '손 높이를 어깨 높이에 맞춰 주세요'
+  return pack(conds, hint)
+}
+
+// ── 팔 위로 뻗기 ─────────────────────────────────────────────────────
+function armsUp(lm) {
+  const p = baseParts(lm)
+  if (!p) return notVisible()
+  const handsVisible = vis(p.lw) && vis(p.rw)
+  const up = handsVisible && p.lw.y < p.nose.y - 0.03 && p.rw.y < p.nose.y - 0.03
+  const conds = [
+    cond('vis', '어깨까지 프레임 안에', true),
+    cond('up', '양손을 머리 위로', up),
+    cond('level', '몸통은 좌우로 곧게', Math.abs(p.shoulderAngle) <= 12, `${Math.abs(p.shoulderAngle).toFixed(0)}°`),
+  ]
+  let hint = null
+  if (!handsVisible) hint = '손이 화면 밖으로 나갔어요 — 조금 뒤로 앉아 주세요'
+  else if (!up) hint = '손끝을 하늘로 민다는 느낌으로 더 높이'
+  else if (Math.abs(p.shoulderAngle) > 12) hint = '몸통이 기울었어요 — 가운데로 곧게'
+  return pack(conds, hint)
+}
+
+// 실시간 판정을 지원하는 동작 목록. chin_tuck 은 정면 웹캠 판정이 어려워
+// 타이머로 진행한다 (AI 서버 연동 시 서버 판정으로 대체).
+export const STRETCH_RULES = {
+  neck_side_left: neckSide('left'),
+  neck_side_right: neckSide('right'),
+  shoulder_shrug: shoulderShrug,
+  chest_opener: chestOpener,
+  arms_up: armsUp,
 }
 
 // ── 스켈레톤 오버레이 ────────────────────────────────────────────────

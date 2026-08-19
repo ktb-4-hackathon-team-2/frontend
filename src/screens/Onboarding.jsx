@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../state/AppContext'
+import { useAuth } from '../state/AuthContext'
+import { aiApi, aiEnabled, captureFrame } from '../lib/aiApi'
 import { CameraView } from '../components/CameraView'
 import { usePoseLandmarker } from '../hooks/usePoseLandmarker'
 import { Btn, Card, Icon, MicroLabel, PostureFigure } from '../components/ui'
@@ -177,12 +179,15 @@ function FigureCycle() {
 }
 
 export default function Onboarding() {
-  const { camera, setCalibrated, setCalibration, setScreen, resetSession } = useApp()
+  const { camera, setCalibrated, setCalibration, setScreen, resetSession, saveAiBaselineId } = useApp()
+  const { member } = useAuth()
   const [step, setStep] = useState(0)
   const [count, setCount] = useState(null) // 3초 캡처 카운트다운
   const [flash, setFlash] = useState(false)
   const [referencePose, setReferencePose] = useState(null)
   const [poseState, setPoseState] = useState(null)
+  // AI 서버 캘리브레이션 상태: idle | sending | ok | fail
+  const [aiCal, setAiCal] = useState({ status: 'idle', message: null })
   const videoRef = useRef(null)
   const countRef = useRef(null)
   const pose = usePoseLandmarker(camera.status === 'active')
@@ -220,6 +225,30 @@ export default function Onboarding() {
     setReferencePose(copyLandmarks(landmarks))
     setFlash(true)
     setTimeout(() => setFlash(false), 500)
+
+    // AI 서버 모드면 같은 프레임으로 서버 캘리브레이션 → baseline_id 발급.
+    // 서버도 스켈레톤만 저장하고 이미지는 저장하지 않는다 (스펙 명시).
+    if (aiEnabled) {
+      setAiCal({ status: 'sending', message: null })
+      aiApi
+        .calibrate({ image: captureFrame(video, 640, 0.75), userId: member?.id })
+        .then((res) => {
+          if (res.ok) {
+            saveAiBaselineId(res.baseline_id)
+            setAiCal({ status: 'ok', message: null })
+          } else {
+            setAiCal({ status: 'fail', message: res.messages?.[0] ?? '서버가 자세를 인식하지 못했어요 — 다시 찍어 주세요' })
+          }
+        })
+        .catch((err) =>
+          setAiCal({
+            status: 'fail',
+            message: err?.status
+              ? `AI 서버 오류 (HTTP ${err.status}): ${err.message} — 로컬 판정으로 동작해요`
+              : `${err?.message ?? 'AI 서버에 연결하지 못했어요'} — 로컬 판정으로 동작해요`,
+          }),
+        )
+    }
   }
 
   // 기준 자세를 3초간 유지한 뒤 마지막 프레임의 스켈레톤 좌표를 저장한다.
@@ -296,17 +325,32 @@ export default function Onboarding() {
         </Card>
         <div className="mt-auto flex flex-col gap-3 pt-6">
           {referencePose ? (
-            <div className="flex items-center gap-3">
-              <div className="flex h-16 w-24 items-center justify-center rounded-lg border border-good/40 bg-good/10">
-                <PostureFigure state="good" className="h-10 w-10 text-good" />
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-3">
+                <div className="flex h-16 w-24 items-center justify-center rounded-lg border border-good/40 bg-good/10">
+                  <PostureFigure state="good" className="h-10 w-10 text-good" />
+                </div>
+                <div className="flex items-center gap-1.5 text-sm text-good">
+                  <Icon name="check" size={15} />
+                  좌표 저장 완료
+                </div>
+                <Btn size="sm" kind="ghost" className="ml-auto" onClick={startCapture}>
+                  다시 찍기
+                </Btn>
               </div>
-              <div className="flex items-center gap-1.5 text-sm text-good">
-                <Icon name="check" size={15} />
-                좌표 저장 완료
-              </div>
-              <Btn size="sm" kind="ghost" className="ml-auto" onClick={startCapture}>
-                다시 찍기
-              </Btn>
+              {aiEnabled && aiCal.status !== 'idle' && (
+                <p
+                  className={`text-[11px] ${
+                    aiCal.status === 'fail' ? 'text-warn2' : aiCal.status === 'ok' ? 'text-good' : 'text-dim'
+                  }`}
+                >
+                  {aiCal.status === 'sending'
+                    ? 'AI 서버 캘리브레이션 중…'
+                    : aiCal.status === 'ok'
+                      ? 'AI 서버 기준 자세 등록 완료'
+                      : aiCal.message}
+                </p>
+              )}
             </div>
           ) : (
             <Btn kind="primary" onClick={startCapture} disabled={camera.status !== 'active' || pose.status !== 'ready' || !poseState?.aligned || count !== null}>

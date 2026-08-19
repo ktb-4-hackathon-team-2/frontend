@@ -90,43 +90,66 @@ export const REPORT_STATS = {
   goal: 70,
 }
 
-// ── 스트레칭 ──────────────────────────────────────────────────────────
+// ── 스트레칭 — AI 서버 카탈로그(/api/stretch/exercises)와 id 일치 ──────
+// 모두 앉아서 하는 동작. targets 는 모니터링 issue code 와 같은 어휘를 쓴다.
+export const TARGET_LABEL = {
+  neck_tilt: '거북목·목 기울임',
+  shoulder_tilt: '어깨 기울어짐',
+  head_down: '고개 숙임',
+  lean_in: '화면에 붙음',
+  lean_out: '뒤로 처짐',
+  shift_x: '좌우 이탈',
+}
+
+// 로컬 판정 모드에서 부위 점수 → issue code 추천용 매핑
+export const REGION_TO_ISSUES = {
+  head: ['neck_tilt', 'head_down'],
+  shoulder: ['shoulder_tilt'],
+  torso: ['lean_in', 'lean_out'],
+}
+
 export const STRETCHES = [
   {
-    id: 'chin',
+    id: 'neck_side_left',
+    name: '목 옆 늘리기 (왼쪽)',
+    hold: 10,
+    targets: ['neck_tilt', 'shoulder_tilt'],
+    steps: ['등을 세우고 정면을 봅니다', '왼쪽 귀가 왼쪽 어깨에 닿듯 천천히 기울입니다', '반대쪽 어깨는 끌려 올라가지 않게 눌러 줍니다'],
+  },
+  {
+    id: 'neck_side_right',
+    name: '목 옆 늘리기 (오른쪽)',
+    hold: 10,
+    targets: ['neck_tilt', 'shoulder_tilt'],
+    steps: ['등을 세우고 정면을 봅니다', '오른쪽 귀가 오른쪽 어깨에 닿듯 천천히 기울입니다', '반대쪽 어깨는 끌려 올라가지 않게 눌러 줍니다'],
+  },
+  {
+    id: 'chin_tuck',
     name: '턱 당기기',
-    region: 'head',
-    tag: '거북목 완화',
-    dur: 30,
-    reps: 3,
-    steps: ['등을 세우고 정면을 봅니다', '턱을 뒤로 지그시 당겨 이중턱을 만듭니다', '5초 유지 후 천천히 풀어줍니다'],
+    hold: 8,
+    targets: ['neck_tilt', 'head_down', 'lean_in'],
+    steps: ['등을 세우고 정면을 봅니다', '턱을 뒤로 지그시 당겨 이중턱을 만듭니다', '뒤통수를 뒤로 민다는 느낌으로 유지합니다'],
   },
   {
-    id: 'chest',
-    name: '가슴 열기',
-    region: 'shoulder',
-    tag: '말린 어깨 완화',
-    dur: 30,
-    reps: 2,
-    steps: ['깍지 낀 손을 등 뒤로 뻗습니다', '어깨를 뒤로 모으며 가슴을 엽니다', '시선은 살짝 위, 호흡은 천천히'],
+    id: 'shoulder_shrug',
+    name: '어깨 으쓱하기',
+    hold: 6,
+    targets: ['shoulder_tilt'],
+    steps: ['양어깨를 귀에 닿을 만큼 끌어올립니다', '그대로 버텼다가', '툭 떨어뜨리며 힘을 완전히 뺍니다'],
   },
   {
-    id: 'neckside',
-    name: '목 옆 늘리기',
-    region: 'head',
-    tag: '목 긴장 완화',
-    dur: 20,
-    reps: 2,
-    steps: ['한 손으로 반대쪽 머리를 감쌉니다', '귀가 어깨에 닿듯 천천히 기울입니다', '좌우를 번갈아 늘려줍니다'],
+    id: 'chest_opener',
+    name: '가슴 열기 (양팔 벌리기)',
+    hold: 10,
+    targets: ['lean_in', 'head_down'],
+    steps: ['양팔을 어깨 높이로 넓게 벌립니다', '가슴을 열고 어깨를 뒤로 모읍니다', '시선은 정면, 호흡은 천천히'],
   },
   {
-    id: 'thoracic',
-    name: '등 펴기',
-    region: 'torso',
-    tag: '굽은 등 완화',
-    dur: 30,
-    reps: 2,
-    steps: ['의자 등받이에 날개뼈를 걸칩니다', '두 손을 목 뒤에 대고 가슴을 엽니다', '천장을 보며 등 상부를 늘립니다'],
+    id: 'arms_up',
+    name: '팔 위로 뻗기',
+    hold: 8,
+    targets: ['head_down', 'shift_x'],
+    steps: ['양팔을 귀 옆까지 곧게 뻗어 올립니다', '손끝을 하늘로 민다는 느낌으로', '몸통이 좌우로 기울지 않게 유지합니다'],
   },
 ]
 

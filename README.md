@@ -7,6 +7,7 @@
 
 ```bash
 npm install
+cp .env.example .env   # 서버 주소 설정 (AI 서버 주소까지 채워져 있음 — 필수)
 npm run dev
 ```
 
@@ -25,6 +26,20 @@ npm run dev
 - ✅ 인증 연동: 제품 키 게이트 → 회원가입/로그인 → JWT 저장(`docs/api-spec.md` 기준, 백엔드 `localhost:8080` 필요).
   시작 시 저장된 토큰을 `GET /api/me`로 검증하고, 만료/무효면 로그인 화면으로. API 주소는 `VITE_API_BASE`로 변경 가능
 - ❌ 결제 없음 — 영상은 어디로도 전송되지 않음
+
+## 판정 엔진 전환 (로컬 ↔ AI 서버)
+
+`.env`(또는 `.env.production`)에 AI 서버 주소를 넣으면 자세 판정이 AI 서버(FastAPI, `docs/ai-server-api-spec.md`)로 전환됩니다.
+
+```bash
+# .env.example 참고
+VITE_AI_API_BASE=          # 비우면 로컬(브라우저 내) MediaPipe 판정
+VITE_AI_API_BASE=http://localhost:8000   # 넣으면 AI 서버 판정
+```
+
+- 온보딩 캡처 시 `/api/calibrate`로 baseline 발급 → localStorage 저장
+- 모니터링은 `/api/monitor/frame` 1.5초 주기 REST 전송(in-flight guard), 일시정지 시 `/api/monitor/reset`
+- 서버 `alert_level` 0/1/2 → 앱 경고 단계 매핑: 자세 무너짐(레벨 0)=위젯, 1=토스트, 2=전체 화면
 
 ## 구조
 

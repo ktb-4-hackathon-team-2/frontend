@@ -5,6 +5,7 @@ import { usePoseLandmarker } from '../hooks/usePoseLandmarker'
 import { POSTURE_META } from '../data/dummy'
 import { maybeChime } from '../lib/sound'
 import { assessPosture } from '../lib/postureDetector'
+import { aiApi, aiEnabled, captureFrame, AI_FRAME_INTERVAL_MS } from '../lib/aiApi'
 
 // 화면 ↔ URL 매핑 — screen 상태의 원천은 URL이다
 export const SCREEN_PATHS = {
@@ -67,10 +68,23 @@ export function AppProvider({ children }) {
   const [localDetection, setLocalDetection] = useState({ status: 'idle', score: null, rawLevel: 0, reason: null })
   const camera = useCamera()
   const detectionVideoRef = useRef(null)
-  const pose = usePoseLandmarker(calibrated && screen === 'monitor' && camera.status === 'active')
+  // AI 모드에서는 로컬 판정 모델이 필요 없다
+  const pose = usePoseLandmarker(!aiEnabled && calibrated && screen === 'monitor' && camera.status === 'active')
   const demoTimer = useRef(null)
   const postureSince = useRef(Date.now())
   const badPostureRef = useRef({ rawLevel: 0, since: 0 })
+
+  // AI 서버 판정용 — baseline은 재접속에도 유지, 세션은 탭 단위
+  const [aiBaselineId, setAiBaselineId] = useState(() => localStorage.getItem('bandeut.baselineId') || '')
+  const aiSessionId = useRef(`tab-${Math.random().toString(36).slice(2, 10)}`)
+  const saveAiBaselineId = useCallback((id) => {
+    setAiBaselineId(id)
+    try {
+      localStorage.setItem('bandeut.baselineId', id)
+    } catch {
+      // 저장 실패는 치명적이지 않음 — 세션 동안은 state 로 유지
+    }
+  }, [])
 
   // 1초 심장박동 — 모니터링 시간 + 스트레칭 카운트다운
   useEffect(() => {
@@ -88,8 +102,78 @@ export function AppProvider({ children }) {
     return () => clearInterval(id)
   }, [paused, settings.stretchMin])
 
-  // 로컬 감지 루프 — 캘리브레이션 기준과 현재 프레임을 브라우저 안에서만 비교한다.
+  // AI 서버 감지 루프 — VITE_AI_API_BASE 설정 시. 프레임을 1.5초 간격으로 보내고 판정을 받는다.
   useEffect(() => {
+    if (!aiEnabled) return
+    const enabled = calibrated && screen === 'monitor' && camera.status === 'active' && !paused
+    if (!enabled) {
+      if (camera.status !== 'active') setLocalDetection({ status: 'idle', score: null, rawLevel: 0, reason: null })
+      return
+    }
+    if (!aiBaselineId) {
+      setLocalDetection({
+        status: 'uncalibrated',
+        score: null,
+        rawLevel: 0,
+        reason: 'AI 서버 기준 자세가 없어요 — 재캘리브레이션을 진행해 주세요',
+      })
+      return
+    }
+
+    let inFlight = false // 서버가 느릴 때 요청이 겹쳐 쌓이지 않도록
+    const id = setInterval(async () => {
+      if (inFlight) return
+      const video = detectionVideoRef.current
+      if (!video || video.readyState < 2) return
+      const image = captureFrame(video)
+      if (!image) return
+      inFlight = true
+      try {
+        const res = await aiApi.monitorFrame({
+          image,
+          baseline_id: aiBaselineId,
+          session_id: aiSessionId.current,
+        })
+        if (!res.detected) {
+          // 자리 비움은 나쁜 자세로 치지 않는다
+          setPosture('good')
+          setLocalDetection({ status: 'tracking', score: null, rawLevel: 0, reason: '자리 비움 — 화면에서 사람을 찾지 못했어요' })
+        } else {
+          // 서버 alert_level(0/1/2) → 우리 3단계: 1→토스트(warn2), 2→전체화면(warn3),
+          // 0인데 posture_ok=false 면 위젯만 바뀌는 warn1
+          const level = res.alert_level >= 2 ? 3 : res.alert_level === 1 ? 2 : res.posture_ok ? 0 : 1
+          setPosture(level === 0 ? 'good' : `warn${level}`)
+          setLocalDetection({
+            status: 'tracking',
+            score: res.score ?? null,
+            rawLevel: level,
+            reason: res.issues?.[0]?.message ?? (res.posture_ok ? '기준 자세를 잘 유지하고 있어요' : '기준 자세에서 벗어나고 있어요'),
+            issues: res.issue_codes ?? [],
+          })
+        }
+        setTick((t) => t + 1)
+      } catch (err) {
+        setLocalDetection({
+          status: 'error',
+          score: null,
+          rawLevel: 0,
+          reason: err?.status ? `AI 서버 오류 (HTTP ${err.status}): ${err.message}` : (err?.message ?? 'AI 서버에 연결하지 못했어요'),
+        })
+      } finally {
+        inFlight = false
+      }
+    }, AI_FRAME_INTERVAL_MS)
+    return () => clearInterval(id)
+  }, [calibrated, camera.status, paused, screen, aiBaselineId])
+
+  // 일시정지 시 서버의 경고 지속시간도 리셋
+  useEffect(() => {
+    if (aiEnabled && paused) aiApi.monitorReset(aiSessionId.current)
+  }, [paused])
+
+  // 로컬 감지 루프 — AI 서버 미설정 시. 캘리브레이션 기준과 현재 프레임을 브라우저 안에서만 비교한다.
+  useEffect(() => {
+    if (aiEnabled) return
     const enabled = calibrated && screen === 'monitor' && camera.status === 'active' && !paused
     if (!enabled) {
       if (camera.status !== 'active') setLocalDetection({ status: 'idle', score: null, rawLevel: 0, reason: null })
@@ -211,6 +295,7 @@ export function AppProvider({ children }) {
     alertCount, elapsedSec, stretchLeft, stretchSuggest, setStretchSuggest,
     postponeStretch, startStretchNow, resetSession,
     tick, camera, detectionVideoRef, localDetection,
+    aiEnabled, aiBaselineId, saveAiBaselineId,
   }
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
