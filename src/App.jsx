@@ -27,7 +27,9 @@ const SCREENS = {
 }
 
 function Topbar() {
-  const { meta, paused, setPaused, elapsedSec, setWidgetMode, posture } = useApp()
+  const { meta, paused, setPaused, elapsedSec, setWidgetMode, posture, localDetection } = useApp()
+  const tracking = localDetection.status === 'tracking'
+  const score = tracking && localDetection.displayScore != null ? localDetection.displayScore : meta.score
   return (
     <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line px-5">
       {paused ? (
@@ -35,7 +37,7 @@ function Topbar() {
       ) : (
         <Chip tone={meta.tone}>
           {meta.label}
-          <span className="font-mono opacity-80">{meta.score}</span>
+          <span className="font-mono opacity-80">{score}</span>
         </Chip>
       )}
       {!paused && posture === 'good' && <span className="text-xs text-dim">조용히 지켜보는 중</span>}

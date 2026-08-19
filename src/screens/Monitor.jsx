@@ -107,10 +107,9 @@ export default function Monitor() {
             </div>
           </div>
         </div>
-        <p className="mt-6 border-t border-line pt-4 text-xs text-dim">
-          {!tracking && localDetection.reason ? `${localDetection.reason} · ` : ''}
-          판정은 전부 이 기기 안에서 — 영상은 실시간으로 전송되지 않아요.
-        </p>
+        {!tracking && localDetection.reason && (
+          <p className="mt-6 border-t border-line pt-4 text-xs text-dim">{localDetection.reason}</p>
+        )}
       </Card>
 
       {/* 카메라 */}

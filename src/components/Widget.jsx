@@ -9,8 +9,12 @@ export function Widget() {
   const {
     posture, meta, paused, demoAlert, warnLevel,
     setPaused, setScreen,
-    alertCount, elapsedSec,
+    alertCount, elapsedSec, localDetection,
   } = useApp()
+  const liveScore =
+    localDetection.status === 'tracking' && localDetection.displayScore != null
+      ? localDetection.displayScore
+      : meta.score
   const [open, setOpen] = useState(false)
 
   // 1단계 데모: 위젯만 조용히 경고색으로
@@ -30,7 +34,7 @@ export function Widget() {
           <div className="mb-3 flex items-center gap-3">
             <PostureFigure state={displayState} className={`h-12 w-12 ${tone.text}`} />
             <div>
-              <div className="font-mono text-2xl font-semibold leading-none">{paused ? '--' : meta.score}</div>
+              <div className="font-mono text-2xl font-semibold leading-none">{paused ? '--' : liveScore}</div>
               <div className="mt-1 text-[11px] text-dim">자세 점수</div>
             </div>
             <div className="ml-auto text-right text-[11px] leading-relaxed text-mid">

@@ -79,8 +79,34 @@ export function AppProvider({ children }) {
   const [tick, setTick] = useState(0)
   const [localDetection, setLocalDetection] = useState({ status: 'idle', score: null, reason: null })
   const camera = useCamera()
+
+  // 감지 전용 히든 비디오 — 화면에 카메라 뷰가 없어도(리포트·설정·위젯 모드)
+  // 프레임을 계속 공급해서 어디서든 측정이 이어지게 한다.
   const detectionVideoRef = useRef(null)
-  const pose = usePoseLandmarker(calibrated && screen === 'monitor' && camera.status === 'active')
+  useEffect(() => {
+    const v = document.createElement('video')
+    v.muted = true
+    v.playsInline = true
+    v.setAttribute('aria-hidden', 'true')
+    v.style.cssText = 'position:fixed;left:-9999px;width:2px;height:2px;opacity:0;pointer-events:none'
+    document.body.appendChild(v)
+    detectionVideoRef.current = v
+    return () => {
+      v.srcObject = null
+      v.remove()
+      detectionVideoRef.current = null
+    }
+  }, [])
+  useEffect(() => {
+    const v = detectionVideoRef.current
+    if (!v) return
+    v.srcObject = camera.stream
+    if (camera.stream) v.play().catch(() => {})
+  }, [camera.stream])
+
+  // 스트레칭 화면에서는 모니터링을 쉰다 — 스트레칭 동작을 나쁜 자세로 오판하지 않도록
+  const monitoringOn = calibrated && screen !== 'stretch' && camera.status === 'active'
+  const pose = usePoseLandmarker(monitoringOn)
   const demoTimer = useRef(null)
   const postureSince = useRef(Date.now())
   // 경고 상태머신 (posture.py AlertTracker 포팅판) — 5초 지속 시 팝업, 15초 지속 시 강한 경고
@@ -129,9 +155,9 @@ export function AppProvider({ children }) {
   }, [paused, settings.stretchMin])
 
   // 감지 루프 — 판정은 전부 이 기기 안에서 (AI 레포 posture.py 포팅판).
-  // 프레임/랜드마크를 서버로 보내지 않는다.
+  // 프레임/랜드마크를 서버로 보내지 않는다. 스트레칭 화면을 제외한 모든 화면에서 동작.
   useEffect(() => {
-    const enabled = calibrated && screen === 'monitor' && camera.status === 'active' && !paused
+    const enabled = monitoringOn && !paused
     if (!enabled) {
       if (camera.status !== 'active') setLocalDetection({ status: 'idle', score: null, reason: null })
       trackerRef.current = new AlertTracker()

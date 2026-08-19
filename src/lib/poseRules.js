@@ -112,6 +112,29 @@ function chestOpener(lm) {
   return pack(conds, hint)
 }
 
+// ── 턱 당기기 ────────────────────────────────────────────────────────
+// 턱을 당기면 머리가 뒤-아래로 회전해 코가 귀 선보다 내려간다.
+// 세션 중 가장 이완된 상태(코-귀선 간격 최소)를 기준으로 하강폭을 잰다.
+function chinTuck(lm, ctx) {
+  const p = baseParts(lm)
+  if (!p) return notVisible()
+  const gap = (p.nose.y - p.earMid.y) / p.sw // 귀선 대비 코 높이 (아래로 양수)
+  const ref = ctx?.ref ?? {}
+  ref.minGap = Math.min(ref.minGap ?? gap, gap)
+  const delta = gap - ref.minGap
+  const tucked = delta >= 0.05
+  const overNod = delta > 0.16 // 당기기가 아니라 고개를 숙인 것
+  const conds = [
+    cond('vis', '어깨까지 프레임 안에', true),
+    cond('tuck', '턱을 뒤로 지그시 당기기', tucked && !overNod, `${Math.round(delta * 100)}%`),
+    cond('level', '고개는 숙이지 말고 시선은 정면', !overNod),
+  ]
+  let hint = null
+  if (overNod) hint = '숙이는 게 아니라 뒤로 당기는 거예요 — 시선은 정면 유지'
+  else if (!tucked) hint = '이중턱을 만든다는 느낌으로 턱을 목 쪽으로'
+  return pack(conds, hint)
+}
+
 // ── 팔 위로 뻗기 ─────────────────────────────────────────────────────
 function armsUp(lm) {
   const p = baseParts(lm)
@@ -130,11 +153,11 @@ function armsUp(lm) {
   return pack(conds, hint)
 }
 
-// 실시간 판정을 지원하는 동작 목록. chin_tuck 은 정면 웹캠 판정이 어려워
-// 타이머로 진행한다 (AI 서버 연동 시 서버 판정으로 대체).
+// 실시간 판정을 지원하는 동작 목록 — 6종 전부
 export const STRETCH_RULES = {
   neck_side_left: neckSide('left'),
   neck_side_right: neckSide('right'),
+  chin_tuck: chinTuck,
   shoulder_shrug: shoulderShrug,
   chest_opener: chestOpener,
   arms_up: armsUp,
