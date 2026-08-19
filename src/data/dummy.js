@@ -153,6 +153,15 @@ export const STRETCHES = [
   },
 ]
 
+/** 감지된 issue code 목록(심각한 순)에 맞는 첫 번째 스트레칭 — 경고에서 바로 제안용 */
+export function recommendStretch(issueCodes = []) {
+  for (const code of issueCodes) {
+    const hit = STRETCHES.find((s) => s.targets.includes(code))
+    if (hit) return hit
+  }
+  return null
+}
+
 // ── 환경 가이드: 캘리브레이션 프레임 기반 더미 진단 ─────────────────────
 export const ENV_CHECKS = [
   {

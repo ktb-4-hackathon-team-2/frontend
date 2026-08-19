@@ -46,9 +46,13 @@ export default function Monitor() {
   const {
     meta, posture, paused, setPaused, postureSinceSec,
     alertCount, elapsedSec, stretchLeft, settings, camera, tick,
-    startStretchNow, postponeStretch, localDetection, aiEnabled,
+    startStretchNow, postponeStretch, localDetection,
   } = useApp()
-  const engine = aiEnabled ? 'AI Server' : 'Local MediaPipe'
+  // 판정 중이면 실측값(포팅된 posture.py 계산), 아니면 상태별 기본값
+  const tracking = localDetection.status === 'tracking'
+  const score = tracking && localDetection.displayScore != null ? localDetection.displayScore : meta.score
+  const mainMsg = tracking && localDetection.reason ? localDetection.reason : meta.msg
+  const regions = tracking && localDetection.regionScores ? localDetection.regionScores : meta.regions
   const tone = TONE[meta.tone]
   const stretchTotal = settings.stretchMin * 60
   const stretchProgress = 1 - stretchLeft / stretchTotal
@@ -76,16 +80,16 @@ export default function Monitor() {
           <Chip tone={paused ? 'neutral' : meta.tone}>{paused ? '일시정지' : meta.label}</Chip>
         </div>
         <div className="flex items-center gap-7">
-          <ScoreRing score={meta.score} tone={tone} state={posture} paused={paused} />
+          <ScoreRing score={score} tone={tone} state={posture} paused={paused} />
           <div className="min-w-0 flex-1">
             <div className="text-lg font-semibold leading-snug">
-              {paused ? '지금은 쉬는 중이에요' : meta.msg}
+              {paused ? '지금은 쉬는 중이에요' : mainMsg}
             </div>
             <div className="mt-1 font-mono text-xs text-dim">
               {paused ? '재개하면 이어서 지켜볼게요' : `이 상태로 ${fmtDurShort(postureSinceSec)}`}
             </div>
             <div className="mt-5 flex flex-col gap-3">
-              {Object.entries(meta.regions).map(([key, v]) => {
+              {Object.entries(regions).map(([key, v]) => {
                 const t = regionTone(v)
                 return (
                   <div key={key} className="flex items-center gap-3">
@@ -104,7 +108,8 @@ export default function Monitor() {
           </div>
         </div>
         <p className="mt-6 border-t border-line pt-4 text-xs text-dim">
-          {localDetection.reason || '카메라를 켜면 이 기기에서 자세를 판정해요.'} · 영상은 서버로 전송되지 않아요.
+          {!tracking && localDetection.reason ? `${localDetection.reason} · ` : ''}
+          판정은 전부 이 기기 안에서 — 영상은 실시간으로 전송되지 않아요.
         </p>
       </Card>
 
@@ -114,7 +119,7 @@ export default function Monitor() {
           <MicroLabel>카메라</MicroLabel>
           <span className="text-[11px] text-dim">영상은 기기 밖으로 나가지 않아요</span>
         </div>
-        <CameraView className="aspect-video" />
+        <CameraView className="aspect-[4/3]" />
         <div className="mt-4 flex items-center gap-2 border-t border-line pt-3.5">
           <span
             className={`h-1.5 w-1.5 rounded-full ${
@@ -125,13 +130,13 @@ export default function Monitor() {
             LOOP {DETECT_INTERVAL_MS}ms · TICK {tick.toLocaleString()}
           </span>
           <span className="ml-auto text-[11px] text-dim">
-            {localDetection.status === 'tracking'
-              ? `${engine} · 인식 중`
+            {tracking
+              ? 'On-device 판정 · 인식 중'
               : localDetection.status === 'loading'
-                ? `${engine} · 로딩 중`
+                ? 'On-device 판정 · 로딩 중'
                 : localDetection.status === 'error'
-                  ? `${engine} · 연결 실패`
-                  : `${engine} · 대기`}
+                  ? 'On-device 판정 · 오류'
+                  : 'On-device 판정 · 대기'}
           </span>
         </div>
       </Card>

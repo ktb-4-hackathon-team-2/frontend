@@ -27,19 +27,16 @@ npm run dev
   시작 시 저장된 토큰을 `GET /api/me`로 검증하고, 만료/무효면 로그인 화면으로. API 주소는 `VITE_API_BASE`로 변경 가능
 - ❌ 결제 없음 — 영상은 어디로도 전송되지 않음
 
-## 판정 엔진 전환 (로컬 ↔ AI 서버)
+## 판정 구조 — 온디바이스
 
-`.env`(또는 `.env.production`)에 AI 서버 주소를 넣으면 자세 판정이 AI 서버(FastAPI, `docs/ai-server-api-spec.md`)로 전환됩니다.
+실시간 자세 판정은 **전부 브라우저 안에서** 처리합니다. 프레임/랜드마크를 서버로 보내지 않아요.
 
-```bash
-# .env.example 참고
-VITE_AI_API_BASE=          # 비우면 로컬(브라우저 내) MediaPipe 판정
-VITE_AI_API_BASE=http://localhost:8000   # 넣으면 AI 서버 판정
-```
-
-- 온보딩 캡처 시 `/api/calibrate`로 baseline 발급 → localStorage 저장
-- 모니터링은 `/api/monitor/frame` 1.5초 주기 REST 전송(in-flight guard), 일시정지 시 `/api/monitor/reset`
-- 서버 `alert_level` 0/1/2 → 앱 경고 단계 매핑: 자세 무너짐(레벨 0)=위젯, 1=토스트, 2=전체 화면
+- `src/lib/postureDetector.js` — AI 레포(`app/core/posture.py` + `config.py`)의 **JS 포팅판**.
+  지표 수식(neck_tilt·shoulder_tilt·head_down·lean_in/out·shift_x), 임계값·strictness 배율,
+  score(최대 편차 비율), 경고 상태머신(5초→팝업, 15초→강한 경고)을 서버 구현과 동일하게 유지.
+  **수식을 바꿀 땐 파이썬/JS 양쪽을 함께 바꿀 것** (골든 테스트로 정합 검증함)
+- 경고 매핑: alert_level 1→토스트, 2→전체 화면, 나쁜 자세지만 경고 전이면 위젯만(warn1)
+- AI 서버(`VITE_AI_API_BASE`)의 역할: 캘리브레이션 baseline 등록(`/api/calibrate` 한 컷) + (추후) 리포트 LLM 분석
 
 ## 구조
 

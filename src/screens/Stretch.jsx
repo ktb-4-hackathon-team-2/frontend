@@ -316,7 +316,7 @@ function ActiveSession({ stretch, onExit }) {
         </div>
         <CameraView
           videoRef={videoRef}
-          className="aspect-video"
+          className="aspect-[4/3]"
           overlay={<canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />}
         />
         {tracking && live.conds ? (
@@ -353,12 +353,20 @@ function ActiveSession({ stretch, onExit }) {
 }
 
 export default function Stretch() {
-  const { posture, stretchLeft, startStretchNow, localDetection, aiEnabled } = useApp()
+  const { posture, stretchLeft, startStretchNow, localDetection, pendingStretchId, clearPendingStretch } = useApp()
   const [activeId, setActiveId] = useState(null)
   const active = STRETCHES.find((s) => s.id === activeId)
 
-  // AI 모드면 방금 감지된 issue code로, 아니면 취약 부위 매핑으로 추천
-  const liveIssues = aiEnabled && localDetection.issues?.length ? localDetection.issues : null
+  // 경고 토스트/오버레이에서 특정 동작으로 딥링크된 경우 바로 세션 시작
+  useEffect(() => {
+    if (pendingStretchId) {
+      setActiveId(pendingStretchId)
+      clearPendingStretch()
+    }
+  }, [pendingStretchId, clearPendingStretch])
+
+  // 온디바이스 판정에서 방금 감지된 issue code로, 없으면 취약 부위 매핑으로 추천
+  const liveIssues = localDetection.issues?.length ? localDetection.issues : null
   const issueSet = liveIssues ?? REGION_TO_ISSUES[weakestRegion(posture)] ?? []
   const isRecommended = (s) => s.targets.some((t) => issueSet.includes(t))
   const sorted = [...STRETCHES].sort((a, b) => Number(isRecommended(b)) - Number(isRecommended(a)))

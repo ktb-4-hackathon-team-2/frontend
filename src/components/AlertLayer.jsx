@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../state/AppContext'
-import { TOAST_MSG } from '../data/dummy'
+import { TOAST_MSG, recommendStretch } from '../data/dummy'
 import { Btn, Icon, PostureFigure } from './ui'
 import { fmtDurShort, fmtClock } from '../lib/format'
 
@@ -9,14 +9,25 @@ import { fmtDurShort, fmtClock } from '../lib/format'
 export function AlertLayer() {
   const {
     effectiveLevel, posture, demoAlert,
-    resolvePosture, setScreen,
+    resolvePosture, setScreen, requestStretch,
     stretchSuggest, startStretchNow, postponeStretch,
+    localDetection,
   } = useApp()
 
   const toastVisible = effectiveLevel === 2
   const overlayVisible = effectiveLevel >= 3
   const toastState = demoAlert === 2 ? 'warn2' : posture
   const msg = TOAST_MSG[toastState] || TOAST_MSG.warn2
+  // 실제 판정 중이면 감지된 문제를 제목으로, 가장 심각한 issue에 맞는 스트레칭을 추천
+  const live = !demoAlert && localDetection.status === 'tracking' && localDetection.issues?.length > 0
+  const toastTitle = live ? localDetection.reason : msg.title
+  const rec = live ? recommendStretch(localDetection.issues) : null
+
+  const goStretch = () => {
+    resolvePosture()
+    if (rec) requestStretch(rec.id)
+    else setScreen('stretch')
+  }
 
   return (
     <>
@@ -31,25 +42,20 @@ export function AlertLayer() {
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="text-sm font-semibold leading-snug">{msg.title}</div>
+                  <div className="text-sm font-semibold leading-snug">{toastTitle}</div>
                   <button onClick={resolvePosture} className="cursor-pointer text-dim transition-colors hover:text-hi">
                     <Icon name="x" size={14} />
                   </button>
                 </div>
-                <p className="mt-1 text-xs leading-relaxed text-mid">{msg.body}</p>
+                <p className="mt-1 text-xs leading-relaxed text-mid">
+                  {rec ? `${rec.name}(${rec.hold}초)로 바로 풀 수 있어요.` : msg.body}
+                </p>
                 <div className="mt-3 flex gap-2">
                   <Btn size="sm" kind="primary" onClick={resolvePosture}>
                     바로잡았어요
                   </Btn>
-                  <Btn
-                    size="sm"
-                    kind="ghost"
-                    onClick={() => {
-                      resolvePosture()
-                      setScreen('stretch')
-                    }}
-                  >
-                    스트레칭 하기
+                  <Btn size="sm" kind="ghost" onClick={goStretch}>
+                    {rec ? `${rec.name} 하기` : '스트레칭 하기'}
                   </Btn>
                 </div>
               </div>
@@ -59,7 +65,7 @@ export function AlertLayer() {
       )}
 
       {/* ── 3단계: 전체 화면 개입 ── */}
-      {overlayVisible && <FullOverlay onResolve={resolvePosture} />}
+      {overlayVisible && <FullOverlay onResolve={resolvePosture} rec={rec} onStretch={goStretch} />}
 
       {/* ── 스트레칭 제안 (경고와 구분되는 차분한 톤) ── */}
       {stretchSuggest && !overlayVisible && (
@@ -92,7 +98,7 @@ export function AlertLayer() {
   )
 }
 
-function FullOverlay({ onResolve }) {
+function FullOverlay({ onResolve, rec, onStretch }) {
   // 오버레이가 떠 있는 동안의 경과 시간 — 실제로는 자세 복구 감지로 사라진다
   const [sec, setSec] = useState(134)
   useEffect(() => {
@@ -124,6 +130,12 @@ function FullOverlay({ onResolve }) {
           <Icon name="check" size={18} />
           바르게 앉았어요
         </Btn>
+        {rec && (
+          <Btn kind="outline" className="mt-3" onClick={onStretch}>
+            <Icon name="person" size={15} />
+            {rec.name}로 풀어주기 · {rec.hold}초
+          </Btn>
+        )}
         <p className="mt-4 text-xs text-dim">
           실제 서비스에선 자세 복구가 감지되면 자동으로 사라져요 — 지금은 버튼으로 시뮬레이션합니다.
         </p>

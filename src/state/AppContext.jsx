@@ -1,11 +1,17 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from './RouterContext'
 import { useCamera } from '../hooks/useCamera'
 import { usePoseLandmarker } from '../hooks/usePoseLandmarker'
 import { POSTURE_META } from '../data/dummy'
 import { maybeChime } from '../lib/sound'
-import { assessPosture } from '../lib/postureDetector'
-import { aiApi, aiEnabled, captureFrame, AI_FRAME_INTERVAL_MS } from '../lib/aiApi'
+import {
+  AlertTracker,
+  computeMetrics,
+  evaluateAgainstBaseline,
+  toDisplayScore,
+  toRegionScores,
+  visibilityOk,
+} from '../lib/postureDetector'
 
 // 화면 ↔ URL 매핑 — screen 상태의 원천은 URL이다
 export const SCREEN_PATHS = {
@@ -20,6 +26,12 @@ const PATH_TO_SCREEN = Object.fromEntries(Object.entries(SCREEN_PATHS).map(([s, 
 
 // rAF가 아니라 setInterval: 탭이 비활성화돼도 감지 루프는 계속 돌아야 한다.
 export const DETECT_INTERVAL_MS = 500
+
+// 스무딩 — 서버는 1~2초 간격 프레임이라 자연히 뭉개지지만, 로컬은 0.5초마다 보므로
+// 지표를 EMA로 평활화한다 (α=0.25, 500ms 틱 기준 시상수 약 2초).
+const SMOOTH_ALPHA = 0.25
+// 나쁜 자세가 이 시간 이상 이어져야 warn1(위젯 신호)을 띄운다 — 순간 떨림으로 인한 깜빡임 방지
+const WARN1_AFTER_SEC = 1.5
 
 export const WARN_LEVEL = { good: 0, warn1: 1, warn2: 2, warn3: 3 }
 
@@ -65,18 +77,32 @@ export function AppProvider({ children }) {
   const [stretchLeft, setStretchLeft] = useState(50 * 60)
   const [stretchSuggest, setStretchSuggest] = useState(false)
   const [tick, setTick] = useState(0)
-  const [localDetection, setLocalDetection] = useState({ status: 'idle', score: null, rawLevel: 0, reason: null })
+  const [localDetection, setLocalDetection] = useState({ status: 'idle', score: null, reason: null })
   const camera = useCamera()
   const detectionVideoRef = useRef(null)
-  // AI 모드에서는 로컬 판정 모델이 필요 없다
-  const pose = usePoseLandmarker(!aiEnabled && calibrated && screen === 'monitor' && camera.status === 'active')
+  const pose = usePoseLandmarker(calibrated && screen === 'monitor' && camera.status === 'active')
   const demoTimer = useRef(null)
   const postureSince = useRef(Date.now())
-  const badPostureRef = useRef({ rawLevel: 0, since: 0 })
+  // 경고 상태머신 (posture.py AlertTracker 포팅판) — 5초 지속 시 팝업, 15초 지속 시 강한 경고
+  const trackerRef = useRef(new AlertTracker())
+  // 지표 EMA 상태
+  const emaRef = useRef(null)
 
-  // AI 서버 판정용 — baseline은 재접속에도 유지, 세션은 탭 단위
+  // 기준 자세 지표 — 캘리브레이션 랜드마크에서 한 번만 계산.
+  // 저장된 기준 좌표는 캡처 시점에 이미 가시성 검사를 통과했고 visibility 필드가
+  // 제거된 상태이므로(copyLandmarks), 여기서 visibilityOk를 다시 검사하면 안 된다.
+  const baselineMetrics = useMemo(() => {
+    const lm = calibration?.landmarks
+    if (!lm) return null
+    try {
+      return computeMetrics(lm)
+    } catch {
+      return null
+    }
+  }, [calibration])
+
+  // AI 서버 baseline — 캘리브레이션 한 컷 등록용 (실시간 판정에는 쓰지 않음)
   const [aiBaselineId, setAiBaselineId] = useState(() => localStorage.getItem('bandeut.baselineId') || '')
-  const aiSessionId = useRef(`tab-${Math.random().toString(36).slice(2, 10)}`)
   const saveAiBaselineId = useCallback((id) => {
     setAiBaselineId(id)
     try {
@@ -102,125 +128,84 @@ export function AppProvider({ children }) {
     return () => clearInterval(id)
   }, [paused, settings.stretchMin])
 
-  // AI 서버 감지 루프 — VITE_AI_API_BASE 설정 시. 프레임을 1.5초 간격으로 보내고 판정을 받는다.
+  // 감지 루프 — 판정은 전부 이 기기 안에서 (AI 레포 posture.py 포팅판).
+  // 프레임/랜드마크를 서버로 보내지 않는다.
   useEffect(() => {
-    if (!aiEnabled) return
     const enabled = calibrated && screen === 'monitor' && camera.status === 'active' && !paused
     if (!enabled) {
-      if (camera.status !== 'active') setLocalDetection({ status: 'idle', score: null, rawLevel: 0, reason: null })
-      return
-    }
-    if (!aiBaselineId) {
-      setLocalDetection({
-        status: 'uncalibrated',
-        score: null,
-        rawLevel: 0,
-        reason: 'AI 서버 기준 자세가 없어요 — 재캘리브레이션을 진행해 주세요',
-      })
-      return
-    }
-
-    let inFlight = false // 서버가 느릴 때 요청이 겹쳐 쌓이지 않도록
-    const id = setInterval(async () => {
-      if (inFlight) return
-      const video = detectionVideoRef.current
-      if (!video || video.readyState < 2) return
-      const image = captureFrame(video)
-      if (!image) return
-      inFlight = true
-      try {
-        const res = await aiApi.monitorFrame({
-          image,
-          baseline_id: aiBaselineId,
-          session_id: aiSessionId.current,
-        })
-        if (!res.detected) {
-          // 자리 비움은 나쁜 자세로 치지 않는다
-          setPosture('good')
-          setLocalDetection({ status: 'tracking', score: null, rawLevel: 0, reason: '자리 비움 — 화면에서 사람을 찾지 못했어요' })
-        } else {
-          // 서버 alert_level(0/1/2) → 우리 3단계: 1→토스트(warn2), 2→전체화면(warn3),
-          // 0인데 posture_ok=false 면 위젯만 바뀌는 warn1
-          const level = res.alert_level >= 2 ? 3 : res.alert_level === 1 ? 2 : res.posture_ok ? 0 : 1
-          setPosture(level === 0 ? 'good' : `warn${level}`)
-          setLocalDetection({
-            status: 'tracking',
-            score: res.score ?? null,
-            rawLevel: level,
-            reason: res.issues?.[0]?.message ?? (res.posture_ok ? '기준 자세를 잘 유지하고 있어요' : '기준 자세에서 벗어나고 있어요'),
-            issues: res.issue_codes ?? [],
-          })
-        }
-        setTick((t) => t + 1)
-      } catch (err) {
-        setLocalDetection({
-          status: 'error',
-          score: null,
-          rawLevel: 0,
-          reason: err?.status ? `AI 서버 오류 (HTTP ${err.status}): ${err.message}` : (err?.message ?? 'AI 서버에 연결하지 못했어요'),
-        })
-      } finally {
-        inFlight = false
-      }
-    }, AI_FRAME_INTERVAL_MS)
-    return () => clearInterval(id)
-  }, [calibrated, camera.status, paused, screen, aiBaselineId])
-
-  // 일시정지 시 서버의 경고 지속시간도 리셋
-  useEffect(() => {
-    if (aiEnabled && paused) aiApi.monitorReset(aiSessionId.current)
-  }, [paused])
-
-  // 로컬 감지 루프 — AI 서버 미설정 시. 캘리브레이션 기준과 현재 프레임을 브라우저 안에서만 비교한다.
-  useEffect(() => {
-    if (aiEnabled) return
-    const enabled = calibrated && screen === 'monitor' && camera.status === 'active' && !paused
-    if (!enabled) {
-      if (camera.status !== 'active') setLocalDetection({ status: 'idle', score: null, rawLevel: 0, reason: null })
-      badPostureRef.current = { rawLevel: 0, since: 0 }
+      if (camera.status !== 'active') setLocalDetection({ status: 'idle', score: null, reason: null })
+      trackerRef.current = new AlertTracker()
+      emaRef.current = null
       return
     }
 
     if (pose.status === 'loading') {
-      setLocalDetection({ status: 'loading', score: null, rawLevel: 0, reason: '자세 모델을 준비하는 중이에요' })
+      setLocalDetection({ status: 'loading', score: null, reason: '자세 모델을 준비하는 중이에요' })
       return
     }
     if (pose.status === 'error') {
-      setLocalDetection({ status: 'error', score: null, rawLevel: 0, reason: '자세 모델을 불러오지 못했어요' })
+      setLocalDetection({ status: 'error', score: null, reason: '자세 모델을 불러오지 못했어요' })
       return
     }
     if (pose.status !== 'ready') return
+    if (!baselineMetrics) {
+      setLocalDetection({ status: 'uncalibrated', score: null, reason: '기준 자세가 없어요 — 재캘리브레이션을 진행해 주세요' })
+      return
+    }
 
     const id = setInterval(() => {
       const result = pose.detect(detectionVideoRef.current)
       const landmarks = result?.landmarks?.[0] ?? null
-      const evaluation = assessPosture(landmarks, calibration?.landmarks)
-      const now = Date.now()
+      const now = Date.now() / 1000
 
-      if (evaluation.status !== 'tracking') {
-        setLocalDetection({ ...evaluation, status: evaluation.status })
+      if (!landmarks || !visibilityOk(landmarks)) {
+        // 자리 비움/가림 — 비운 시간은 나쁜 자세 지속시간에서 제외 (note_absence)
+        trackerRef.current.noteAbsence(now)
+        setLocalDetection((d) => ({ ...d, status: 'lost', reason: '얼굴과 양쪽 어깨를 찾는 중이에요' }))
         return
       }
 
-      const rawLevel = evaluation.rawLevel
-      if (rawLevel === 0) {
-        badPostureRef.current = { rawLevel: 0, since: 0 }
-        setPosture('good')
-      } else {
-        if (badPostureRef.current.rawLevel !== rawLevel || badPostureRef.current.since === 0) {
-          badPostureRef.current = { rawLevel, since: now }
-        }
-        const heldMs = now - badPostureRef.current.since
-        // 나쁜 상태가 이어질수록 warn1 → warn2 → warn3으로 단계적으로 올린다.
-        const level = rawLevel >= 3 && heldMs >= 8000 ? 3 : rawLevel >= 2 && heldMs >= 3000 ? 2 : 1
-        setPosture(`warn${level}`)
-      }
+      const raw = computeMetrics(landmarks)
+      // 지표 EMA — 프레임 단위 좌표 떨림을 흡수한 뒤 판정에 넘긴다
+      const prev = emaRef.current
+      const metrics = prev
+        ? Object.fromEntries(
+            Object.entries(raw).map(([k, v]) => [k, prev[k] * (1 - SMOOTH_ALPHA) + v * SMOOTH_ALPHA]),
+          )
+        : raw
+      emaRef.current = metrics
 
-      setLocalDetection({ ...evaluation, status: 'tracking' })
+      const ev = evaluateAgainstBaseline(metrics, baselineMetrics, 'medium')
+      const alert = trackerRef.current.update(ev.posture_ok, now)
+      // 서버와 같은 매핑: alert_level 1→토스트(warn2), 2→전체화면(warn3).
+      // warn1(위젯 신호)은 나쁜 자세가 WARN1_AFTER_SEC 이상 이어졌을 때만 — 깜빡임 방지.
+      const level =
+        alert.alert_level >= 2 ? 3
+        : alert.alert_level === 1 ? 2
+        : ev.posture_ok ? 0
+        : alert.bad_duration_sec >= WARN1_AFTER_SEC ? 1
+        : 0
+      setPosture(level === 0 ? 'good' : `warn${level}`)
+      setLocalDetection({
+        status: 'tracking',
+        score: ev.score,
+        displayScore: toDisplayScore(ev.score),
+        regionScores: toRegionScores(ev.deviations),
+        postureOk: ev.posture_ok,
+        // 심각도 높은 순으로 — 첫 번째가 경고 문구·스트레칭 추천의 기준이 된다
+        issues: [...ev.issues].sort((a, b) => b.severity - a.severity).map((i) => i.code),
+        badDurationSec: alert.bad_duration_sec,
+        reason: ev.issues[0]?.message ?? '기준 자세를 잘 유지하고 있어요',
+      })
       setTick((t) => t + 1)
     }, DETECT_INTERVAL_MS)
     return () => clearInterval(id)
-  }, [calibrated, calibration, camera.status, paused, pose.detect, pose.status, screen])
+  }, [calibrated, baselineMetrics, camera.status, paused, pose.detect, pose.status, screen])
+
+  // 일시정지/재개 시 경고 지속시간 리셋
+  useEffect(() => {
+    trackerRef.current = new AlertTracker()
+  }, [paused])
 
   useEffect(() => {
     postureSince.current = Date.now()
@@ -269,6 +254,17 @@ export function AppProvider({ children }) {
     setScreen('stretch') // '/stretch' 로 이동하면 위젯 모드도 자연히 해제된다
   }, [settings.stretchMin, setScreen])
 
+  // 경고에서 특정 스트레칭 세션으로 바로 진입 (예: 거북목 경고 → 턱 당기기)
+  const [pendingStretchId, setPendingStretchId] = useState(null)
+  const requestStretch = useCallback(
+    (id) => {
+      setPendingStretchId(id)
+      setScreen('stretch')
+    },
+    [setScreen],
+  )
+  const clearPendingStretch = useCallback(() => setPendingStretchId(null), [])
+
   const resetSession = useCallback(() => {
     setElapsedSec(0)
     setAlertCount(0)
@@ -294,8 +290,9 @@ export function AppProvider({ children }) {
     settings, setSettings, updateSetting,
     alertCount, elapsedSec, stretchLeft, stretchSuggest, setStretchSuggest,
     postponeStretch, startStretchNow, resetSession,
+    pendingStretchId, requestStretch, clearPendingStretch,
     tick, camera, detectionVideoRef, localDetection,
-    aiEnabled, aiBaselineId, saveAiBaselineId,
+    aiBaselineId, saveAiBaselineId,
   }
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

@@ -1,109 +1,188 @@
-// 캘리브레이션 기준 자세와 현재 MediaPipe 랜드마크를 비교하는 로컬 판정기.
-// 의료적 진단이 아니라, 사용자가 캡처한 기준 자세에서 얼마나 벗어났는지 측정한다.
+// AI 레포(app/core/posture.py + app/config.py)를 JS로 포팅한 온디바이스 판정기.
+// 지표 수식·임계값·경고 상태머신을 서버 구현과 동일하게 유지한다.
+// 원본: github.com/ktb-4-hackathon-team-2/AI @ main — 수식을 바꿀 땐 양쪽을 함께 바꿀 것.
 
-const LM = {
-  nose: 0,
-  leftEar: 7,
-  rightEar: 8,
-  leftShoulder: 11,
-  rightShoulder: 12,
-  leftHip: 23,
-  rightHip: 24,
+// ── config.py ────────────────────────────────────────────────────────
+// 모니터링 판정에 쓰는 기본 임계값 (strictness=medium 기준)
+export const THRESHOLDS = {
+  neck_tilt_deg: 12.0, // 목 기울기 변화 허용치 (도)
+  shoulder_tilt_deg: 7.0, // 어깨 기울기 변화 허용치 (도)
+  head_down_drop: 0.18, // 머리 숙임: baseline 대비 비율 감소 허용치
+  lean_ratio: 0.13, // 어깨 너비 변화율(가까워짐/멀어짐) 허용치
+  shift_x: 0.12, // 좌우 이동 허용치 (정규화 좌표)
 }
 
+// "얼마나 엄격하게 경고할지" — 임계값에 곱해지는 배율
+export const STRICTNESS_SCALE = { low: 1.4, medium: 1.0, high: 0.7 }
+
+// 나쁜 자세가 지속됐을 때 경고 단계가 올라가는 시간(초)
+export const DEFAULT_WARN_AFTER_SEC = 5.0 // level 1: 팝업 경고
+export const DEFAULT_ALARM_AFTER_SEC = 15.0 // level 2: 강한 경고
+
+// ── posture.py ───────────────────────────────────────────────────────
+const LM = { NOSE: 0, LEFT_EAR: 7, RIGHT_EAR: 8, LEFT_SHOULDER: 11, RIGHT_SHOULDER: 12 }
+
+// 자세 판정에 반드시 보여야 하는 랜드마크
+const REQUIRED_IDS = [LM.NOSE, LM.LEFT_EAR, LM.RIGHT_EAR, LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER]
 const MIN_VISIBILITY = 0.5
-const REQUIRED = [LM.nose, LM.leftEar, LM.rightEar, LM.leftShoulder, LM.rightShoulder]
 
-const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
+const deg = (rad) => (rad * 180) / Math.PI
+// 파이썬 %는 항상 양수를 반환 — JS %와 다르므로 맞춰준다
+const pymod = (a, n) => ((a % n) + n) % n
+const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]
+const distance = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1])
+const pt = (lm) => [lm.x, lm.y]
 
-function visible(point) {
-  return Boolean(point) && (point.visibility ?? 1) >= MIN_VISIBILITY
+export function visibilityOk(landmarks) {
+  return REQUIRED_IDS.every((i) => (landmarks?.[i]?.visibility ?? 0) >= MIN_VISIBILITY)
 }
 
-function midpoint(a, b) {
-  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
-}
+/** 정규화 좌표 기반 자세 지표 — 어깨 너비로 나눠 카메라 거리와 무관하게 만든 값들 */
+export function computeMetrics(landmarks) {
+  const ls = pt(landmarks[LM.LEFT_SHOULDER])
+  const rs = pt(landmarks[LM.RIGHT_SHOULDER])
+  const le = pt(landmarks[LM.LEFT_EAR])
+  const re = pt(landmarks[LM.RIGHT_EAR])
+  const nose = pt(landmarks[LM.NOSE])
 
-function distance(a, b) {
-  return Math.hypot(a.x - b.x, a.y - b.y)
-}
+  const sw = distance(ls, rs) || 1e-6 // 어깨 너비 = 거리 프록시
+  const sc = mid(ls, rs) // 어깨 중심
+  const ec = mid(le, re) // 귀 중심 (머리 위치)
 
-function relativePoint(point, origin, scale) {
+  // 어깨선이 수평에서 얼마나 기울었는지 (도, -90~90)
+  let shoulderTilt = deg(Math.atan2(rs[1] - ls[1], rs[0] - ls[0]))
+  shoulderTilt = pymod(shoulderTilt + 90, 180) - 90
+
+  // 귀 중심→어깨 중심 벡터가 수직에서 기운 각도 (거북목/목 기울기)
+  const neckDx = ec[0] - sc[0]
+  const neckDy = sc[1] - ec[1] // 위쪽이 양수
+  const neckTilt = neckDy !== 0 ? deg(Math.atan2(neckDx, neckDy)) : 0.0
+
+  // 귀선 기울기 (머리 좌우로 갸웃한 정도)
+  let headRoll = deg(Math.atan2(re[1] - le[1], re[0] - le[0]))
+  headRoll = pymod(headRoll + 90, 180) - 90
+
   return {
-    x: (point.x - origin.x) / scale,
-    y: (point.y - origin.y) / scale,
+    shoulder_width: sw,
+    shoulder_tilt_deg: shoulderTilt,
+    neck_tilt_deg: neckTilt,
+    head_roll_deg: headRoll,
+    head_down: (sc[1] - nose[1]) / sw, // 작아질수록 머리를 숙인 것
+    head_forward: neckDx / sw, // 대각선 뷰에서 앞뒤 이동이 드러남
+    center_x: sc[0],
+    center_y: sc[1],
   }
 }
 
-function lineAngle(a, b) {
-  return Math.atan2(b.y - a.y, b.x - a.x)
-}
+const round3 = (v) => Math.round(v * 1000) / 1000
 
-function angleDifference(a, b) {
-  let diff = a - b
-  while (diff > Math.PI) diff -= Math.PI * 2
-  while (diff < -Math.PI) diff += Math.PI * 2
-  return Math.abs(diff)
-}
+/**
+ * 현재 지표를 baseline과 비교해 문제 목록과 종합 점수를 낸다.
+ * score: 최대 편차 비율 (0=완벽, 1.0 이상 = 임계치 초과)
+ */
+export function evaluateAgainstBaseline(metrics, baselineMetrics, strictness = 'medium') {
+  const scale = STRICTNESS_SCALE[strictness] ?? 1.0
+  const b = baselineMetrics
+  const issues = []
+  const deviations = {}
 
-function makeSnapshot(landmarks) {
-  if (!landmarks || !REQUIRED.every((index) => visible(landmarks[index]))) return null
-
-  const leftShoulder = landmarks[LM.leftShoulder]
-  const rightShoulder = landmarks[LM.rightShoulder]
-  const shoulderCenter = midpoint(leftShoulder, rightShoulder)
-  const shoulderWidth = Math.max(distance(leftShoulder, rightShoulder), 0.05)
-  const leftEar = landmarks[LM.leftEar]
-  const rightEar = landmarks[LM.rightEar]
-  const head = midpoint(leftEar, rightEar)
-
-  const snapshot = {
-    head: relativePoint(head, shoulderCenter, shoulderWidth),
-    shoulderAngle: lineAngle(leftShoulder, rightShoulder),
-    torso: null,
+  const check = (code, value, threshold, message) => {
+    const limit = threshold * scale
+    const ratio = limit ? Math.abs(value) / limit : 0.0
+    deviations[code] = round3(ratio)
+    if (ratio >= 1.0) {
+      issues.push({ code, message, severity: Math.min(ratio, 3.0) })
+    }
+    return ratio
   }
 
-  const leftHip = landmarks[LM.leftHip]
-  const rightHip = landmarks[LM.rightHip]
-  if (visible(leftHip) && visible(rightHip)) {
-    snapshot.torso = relativePoint(midpoint(leftHip, rightHip), shoulderCenter, shoulderWidth)
+  check(
+    'neck_tilt', metrics.neck_tilt_deg - b.neck_tilt_deg,
+    THRESHOLDS.neck_tilt_deg, '목이 기울거나 앞으로 나왔어요 (거북목 주의)',
+  )
+  check(
+    'shoulder_tilt', metrics.shoulder_tilt_deg - b.shoulder_tilt_deg,
+    THRESHOLDS.shoulder_tilt_deg, '어깨가 한쪽으로 기울었어요',
+  )
+  // head_down은 '감소'만 문제 (머리를 숙임)
+  const drop = (b.head_down - metrics.head_down) / Math.max(Math.abs(b.head_down), 1e-6)
+  check('head_down', Math.max(drop, 0.0), THRESHOLDS.head_down_drop, '고개를 숙이고 있어요')
+
+  const lean = metrics.shoulder_width / Math.max(b.shoulder_width, 1e-6) - 1.0
+  if (lean > 0) {
+    check('lean_in', lean, THRESHOLDS.lean_ratio, '화면에 너무 가까워요 (앞으로 기울었어요)')
+    deviations.lean_out ??= 0.0
+  } else {
+    check('lean_out', lean, THRESHOLDS.lean_ratio, '기준 자세보다 뒤로 처져 있어요')
+    deviations.lean_in ??= 0.0
   }
+  check('shift_x', metrics.center_x - b.center_x, THRESHOLDS.shift_x, '기준 위치에서 좌우로 벗어났어요')
 
-  return snapshot
-}
-
-function normalizedDrift(current, reference) {
-  return distance(current, reference)
+  const score = round3(Math.max(0, ...Object.values(deviations)))
+  return {
+    posture_ok: issues.length === 0,
+    score,
+    issues,
+    deviations,
+  }
 }
 
 /**
- * @returns {{status: string, rawLevel: number, score: number|null, reason: string}}
+ * 나쁜 자세 지속 시간에 따라 경고 단계를 올리는 상태머신.
+ * level 0: 정상 / level 1: 팝업 경고 / level 2: 강한 경고(알람).
  */
-export function assessPosture(landmarks, referenceLandmarks) {
-  const current = makeSnapshot(landmarks)
-  const reference = makeSnapshot(referenceLandmarks)
-
-  if (!referenceLandmarks) {
-    return { status: 'uncalibrated', rawLevel: 0, score: null, reason: '기준 자세를 먼저 캡처해 주세요' }
-  }
-  if (!current || !reference) {
-    return { status: 'lost', rawLevel: 0, score: null, reason: '얼굴과 양쪽 어깨를 찾는 중이에요' }
+export class AlertTracker {
+  constructor(warnAfter = DEFAULT_WARN_AFTER_SEC, alarmAfter = DEFAULT_ALARM_AFTER_SEC) {
+    this.warnAfter = warnAfter
+    this.alarmAfter = alarmAfter
+    this.badSince = null
+    this.lastSeen = null
   }
 
-  const headDrift = normalizedDrift(current.head, reference.head)
-  const shoulderDrift = clamp(angleDifference(current.shoulderAngle, reference.shoulderAngle) / (Math.PI / 4), 0, 1)
-  const torsoDrift = current.torso && reference.torso ? normalizedDrift(current.torso, reference.torso) : 0
+  /** @param {boolean} postureOk @param {number} now 초 단위 timestamp */
+  update(postureOk, now = Date.now() / 1000) {
+    // 프레임 간격이 너무 길면(모니터링 중단 등) 지속시간 리셋
+    if (this.lastSeen !== null && now - this.lastSeen > 30.0) {
+      this.badSince = null
+    }
+    this.lastSeen = now
 
-  // 머리 위치 변화에 가장 큰 가중치를 주고, 어깨 기울기와 상체 위치를 보조 지표로 사용한다.
-  const drift = clamp(headDrift * 0.55 + shoulderDrift * 0.2 + torsoDrift * 0.25, 0, 1)
-  const rawLevel = drift >= 0.32 ? 3 : drift >= 0.2 ? 2 : drift >= 0.11 ? 1 : 0
-  const score = Math.round(100 - clamp(drift / 0.4, 0, 1) * 68)
+    if (postureOk) {
+      this.badSince = null
+      return { alert_level: 0, bad_duration_sec: 0.0, alarm: false }
+    }
 
+    if (this.badSince === null) this.badSince = now
+    const duration = now - this.badSince
+    const level = duration >= this.alarmAfter ? 2 : duration >= this.warnAfter ? 1 : 0
+    return {
+      alert_level: level,
+      bad_duration_sec: Math.round(duration * 10) / 10,
+      alarm: level >= 2,
+    }
+  }
+
+  /** 자리 비움/미검출 프레임: 비운 시간은 나쁜 자세 지속시간에서 제외 */
+  noteAbsence(now = Date.now() / 1000) {
+    if (this.badSince !== null && this.lastSeen !== null) {
+      this.badSince += now - this.lastSeen
+    }
+    this.lastSeen = now
+  }
+}
+
+// ── UI 표시용 변환 (프론트 전용 — 서버 포팅 아님) ─────────────────────
+// score(편차 비율)를 0~100 점수로: 0→100점, 임계치(1.0)→55점, 2.0+→10점
+export function toDisplayScore(score) {
+  return Math.max(5, Math.round(100 - Math.min(score ?? 0, 2) * 45))
+}
+
+// 부위별 미터: 관련 편차 중 최악을 부위 점수로 환산
+export function toRegionScores(deviations = {}) {
+  const worst = (...codes) => Math.max(0, ...codes.map((c) => deviations[c] ?? 0))
   return {
-    status: 'tracking',
-    rawLevel,
-    score,
-    reason: rawLevel === 0 ? '기준 자세를 잘 유지하고 있어요' : '기준 자세에서 벗어나고 있어요',
-    metrics: { headDrift, shoulderDrift, torsoDrift, drift },
+    head: toDisplayScore(worst('neck_tilt', 'head_down')),
+    shoulder: toDisplayScore(worst('shoulder_tilt')),
+    torso: toDisplayScore(worst('lean_in', 'lean_out', 'shift_x')),
   }
 }

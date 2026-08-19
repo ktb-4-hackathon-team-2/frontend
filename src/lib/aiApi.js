@@ -1,13 +1,10 @@
-// AI 판정 서버(FastAPI) 클라이언트 — docs/ai-server-api-spec.md 기준.
-// VITE_AI_API_BASE 가 설정되면 자세 판정이 이 서버로 전환되고,
-// 비어 있으면 기존 로컬 MediaPipe 판정으로 동작한다 (앱 서버 VITE_API_BASE 와는 별개).
+// AI 서버(FastAPI) 클라이언트 — docs/ai-server-api-spec.md 기준.
+// 실시간 판정은 프론트 온디바이스(src/lib/postureDetector.js — posture.py 포팅판)로 처리하고,
+// AI 서버는 캘리브레이션 baseline 등록과 (추후) 리포트 LLM 분석에만 사용한다.
 
 const AI_BASE = import.meta.env.VITE_AI_API_BASE ?? ''
 
 export const aiEnabled = Boolean(AI_BASE)
-
-// 프레임 전송 주기 — 스펙 권장 1~2초에 1프레임
-export const AI_FRAME_INTERVAL_MS = 1500
 
 export class AiApiError extends Error {
   constructor(message, status = 0) {
@@ -62,11 +59,4 @@ export const aiApi = {
 
   /** 해당 유저의 최신 baseline — 재접속 시 재캘리브레이션 생략용 (없으면 404) */
   userBaseline: (userId) => request(`/api/users/${encodeURIComponent(userId)}/baseline`),
-
-  /** 실시간 모니터링 판정 */
-  monitorFrame: (payload) => request('/api/monitor/frame', { method: 'POST', body: payload }),
-
-  /** 일시정지/재개 시 경고 지속시간 리셋 — 실패해도 무시 */
-  monitorReset: (sessionId) =>
-    request('/api/monitor/reset', { method: 'POST', body: { session_id: sessionId } }).catch(() => {}),
 }
