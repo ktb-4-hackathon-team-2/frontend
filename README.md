@@ -19,8 +19,12 @@ npm run dev
   조건(머리 기울기 ≥18°, 어깨 수평, 좌우 교대)을 4초 유지하면 세트 자동 카운트. 카메라가 꺼져 있으면 타이머 모드로 폴백.
   wasm은 `public/mediapipe-wasm/`(로컬), 모델 `.task`만 최초 1회 구글 CDN에서 로드
 - ✅ 상시 미니 위젯(트레이 아이콘이 될 자리) + 위젯 모드
+- ✅ URL 라우팅: `/key` `/login` `/signup` `/onboarding` `/monitor` `/report` `/stretch` `/environment` `/alerts` `/settings` `/widget`.
+  라이브러리 없이 History API(`src/state/RouterContext.jsx`) — 인증/캘리브레이션 상태에 안 맞는 경로는 자동 리다이렉트
 - ❌ 자세 판정: **좌측 하단 DEV 패널**에서 양호/경고1·2·3을 수동 토글 (MediaPipe 결과를 대신함)
-- ❌ 서버/로그인/결제 없음 — 영상은 어디로도 전송되지 않음
+- ✅ 인증 연동: 제품 키 게이트 → 회원가입/로그인 → JWT 저장(`docs/api-spec.md` 기준, 백엔드 `localhost:8080` 필요).
+  시작 시 저장된 토큰을 `GET /api/me`로 검증하고, 만료/무효면 로그인 화면으로. API 주소는 `VITE_API_BASE`로 변경 가능
+- ❌ 결제 없음 — 영상은 어디로도 전송되지 않음
 
 ## 구조
 

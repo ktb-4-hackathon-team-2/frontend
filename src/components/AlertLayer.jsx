@@ -9,7 +9,7 @@ import { fmtDurShort, fmtClock } from '../lib/format'
 export function AlertLayer() {
   const {
     effectiveLevel, posture, demoAlert,
-    resolvePosture, setScreen, setWidgetMode,
+    resolvePosture, setScreen,
     stretchSuggest, startStretchNow, postponeStretch,
   } = useApp()
 
@@ -46,7 +46,6 @@ export function AlertLayer() {
                     kind="ghost"
                     onClick={() => {
                       resolvePosture()
-                      setWidgetMode(false)
                       setScreen('stretch')
                     }}
                   >

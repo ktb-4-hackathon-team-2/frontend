@@ -1,10 +1,14 @@
-import { AppProvider, useApp } from './state/AppContext'
+import { useEffect } from 'react'
+import { AppProvider, useApp, SCREEN_PATHS } from './state/AppContext'
+import { AuthProvider, useAuth } from './state/AuthContext'
+import { RouterProvider, useRouter } from './state/RouterContext'
 import { Sidebar } from './components/Sidebar'
 import { Widget, WidgetModeBackdrop } from './components/Widget'
 import { DebugPanel } from './components/DebugPanel'
 import { AlertLayer } from './components/AlertLayer'
-import { Btn, Chip, Icon } from './components/ui'
+import { Btn, Chip, Icon, MicroLabel, PostureFigure } from './components/ui'
 import { fmtClock } from './lib/format'
+import Auth from './screens/Auth'
 import Onboarding from './screens/Onboarding'
 import Monitor from './screens/Monitor'
 import Report from './screens/Report'
@@ -71,8 +75,68 @@ function Shell() {
   )
 }
 
+const AUTH_PATHS = ['/key', '/login', '/signup']
+const APP_PATHS = [...Object.values(SCREEN_PATHS), '/widget']
+const TITLES = {
+  '/key': '제품 키',
+  '/login': '로그인',
+  '/signup': '회원가입',
+  '/onboarding': '캘리브레이션',
+  '/monitor': '모니터링',
+  '/report': '리포트',
+  '/stretch': '스트레칭',
+  '/environment': '환경 가이드',
+  '/alerts': '알림 단계',
+  '/settings': '설정',
+  '/widget': '위젯 모드',
+}
+
 function Root() {
+  const { status, keyVerified } = useAuth()
   const { calibrated, widgetMode } = useApp()
+  const { path, navigate } = useRouter()
+
+  // 인증/캘리브레이션 상태에 맞지 않는 경로는 교정한다 (가드 리다이렉트)
+  useEffect(() => {
+    if (status === 'checking') return
+    if (status !== 'authed') {
+      if (!keyVerified) {
+        if (path !== '/key') navigate('/key', { replace: true })
+      } else if (!AUTH_PATHS.includes(path) || path === '/key') {
+        navigate('/login', { replace: true })
+      }
+      return
+    }
+    if (!calibrated) {
+      if (path !== '/onboarding') navigate('/onboarding', { replace: true })
+      return
+    }
+    if (!APP_PATHS.includes(path)) navigate('/monitor', { replace: true })
+  }, [status, keyVerified, calibrated, path, navigate])
+
+  useEffect(() => {
+    document.title = TITLES[path] ? `반듯 — ${TITLES[path]}` : '반듯 — 자세 지킴이 프로토타입'
+  }, [path])
+
+  // 저장된 토큰을 /api/me 로 검증하는 동안의 스플래시
+  if (status === 'checking') {
+    return (
+      <div className="app-bg flex min-h-screen flex-col items-center justify-center gap-3">
+        <PostureFigure state="good" className="blink-dot h-12 w-12 text-good" stroke={6} />
+        <MicroLabel>세션 확인 중…</MicroLabel>
+      </div>
+    )
+  }
+
+  // 제품 키 → 로그인/회원가입 게이트
+  if (status !== 'authed') {
+    return (
+      <div className="app-bg min-h-screen">
+        <Auth />
+      </div>
+    )
+  }
+
   return (
     <div className="app-bg min-h-screen">
       {!calibrated ? <Onboarding /> : widgetMode ? <WidgetModeBackdrop /> : <Shell />}
@@ -85,8 +149,12 @@ function Root() {
 
 export default function App() {
   return (
-    <AppProvider>
-      <Root />
-    </AppProvider>
+    <RouterProvider>
+      <AuthProvider>
+        <AppProvider>
+          <Root />
+        </AppProvider>
+      </AuthProvider>
+    </RouterProvider>
   )
 }

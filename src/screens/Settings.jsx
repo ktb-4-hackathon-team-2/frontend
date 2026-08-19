@@ -1,4 +1,5 @@
 import { useApp } from '../state/AppContext'
+import { useAuth } from '../state/AuthContext'
 import { Btn, Card, Icon, MicroLabel, ScreenHeader, Toggle } from '../components/ui'
 import { fmtClock } from '../lib/format'
 import { playChime } from '../lib/sound'
@@ -29,6 +30,7 @@ function Row({ label, desc, children }) {
 
 export default function Settings() {
   const { settings, updateSetting, setCalibrated, stretchLeft, setStretchSuggest, calibration } = useApp()
+  const { member, logout } = useAuth()
 
   return (
     <div className="max-w-3xl">
@@ -170,7 +172,20 @@ export default function Settings() {
         </Row>
       </Card>
 
-      <Card className="rise d4 flex items-start gap-3 border-dashed px-6 py-4">
+      {/* 계정 */}
+      <Card className="rise d4 mb-4 px-6 py-2">
+        <div className="py-2">
+          <MicroLabel className="pt-2">계정</MicroLabel>
+        </div>
+        <Row label={member?.email ?? '로그인됨'} desc="계정은 리포트 저장에만 사용돼요">
+          <Btn size="sm" kind="outline" onClick={logout}>
+            <Icon name="logout" size={13} />
+            로그아웃
+          </Btn>
+        </Row>
+      </Card>
+
+      <Card className="rise d5 flex items-start gap-3 border-dashed px-6 py-4">
         <Icon name="wrench" size={15} className="mt-0.5 shrink-0 text-dim" />
         <p className="text-xs leading-relaxed text-dim">
           프로토타입 범위 — 자세 판정(MediaPipe)·서버·계정은 아직 없어요. 자세 상태는 좌측 하단 DEV 패널로

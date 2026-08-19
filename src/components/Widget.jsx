@@ -8,7 +8,7 @@ import { fmtDur } from '../lib/format'
 export function Widget() {
   const {
     posture, meta, paused, demoAlert, warnLevel,
-    widgetMode, setWidgetMode, setPaused, setScreen,
+    setPaused, setScreen,
     alertCount, elapsedSec,
   } = useApp()
   const [open, setOpen] = useState(false)
@@ -55,7 +55,6 @@ export function Widget() {
               kind="primary"
               className="flex-1"
               onClick={() => {
-                setWidgetMode(false)
                 setScreen('monitor')
                 setOpen(false)
               }}

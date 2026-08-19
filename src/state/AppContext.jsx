@@ -1,7 +1,19 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { useRouter } from './RouterContext'
 import { useCamera } from '../hooks/useCamera'
 import { POSTURE_META } from '../data/dummy'
 import { maybeChime } from '../lib/sound'
+
+// 화면 ↔ URL 매핑 — screen 상태의 원천은 URL이다
+export const SCREEN_PATHS = {
+  monitor: '/monitor',
+  report: '/report',
+  stretch: '/stretch',
+  environment: '/environment',
+  alerts: '/alerts',
+  settings: '/settings',
+}
+const PATH_TO_SCREEN = Object.fromEntries(Object.entries(SCREEN_PATHS).map(([s, p]) => [p, s]))
 
 // rAF가 아니라 setInterval: 탭이 비활성화돼도 감지 루프는 계속 돌아야 한다.
 export const DETECT_INTERVAL_MS = 500
@@ -18,12 +30,29 @@ const Ctx = createContext(null)
 export const useApp = () => useContext(Ctx)
 
 export function AppProvider({ children }) {
-  const [screen, setScreen] = useState('monitor')
+  const { path, navigate } = useRouter()
+
+  // screen/widgetMode 는 URL에서 파생 — setScreen/setWidgetMode 는 내비게이션이다
+  const screenFromPath = PATH_TO_SCREEN[path]
+  const lastScreenRef = useRef('monitor')
+  useEffect(() => {
+    if (screenFromPath) lastScreenRef.current = screenFromPath
+  }, [screenFromPath])
+  const screen = screenFromPath ?? lastScreenRef.current
+  const setScreen = useCallback((id) => navigate(SCREEN_PATHS[id] ?? '/monitor'), [navigate])
+  const widgetMode = path === '/widget'
+  const setWidgetMode = useCallback(
+    (on) => {
+      if (on) navigate('/widget')
+      else navigate(SCREEN_PATHS[lastScreenRef.current] ?? '/monitor')
+    },
+    [navigate],
+  )
+
   const [calibrated, setCalibrated] = useState(false)
   const [calibration, setCalibration] = useState(null) // { good, usual, at }
   const [posture, setPosture] = useState('good')
   const [paused, setPaused] = useState(false)
-  const [widgetMode, setWidgetMode] = useState(false)
   const [demoAlert, setDemoAlert] = useState(0) // 알림 데모용 강제 단계 (0 = 없음)
   const [settings, setSettings] = useState({
     maxAlertLevel: 2, // 3단계는 옵트인
@@ -113,9 +142,8 @@ export function AppProvider({ children }) {
   const startStretchNow = useCallback(() => {
     setStretchSuggest(false)
     setStretchLeft(settings.stretchMin * 60)
-    setScreen('stretch')
-    setWidgetMode(false)
-  }, [settings.stretchMin])
+    setScreen('stretch') // '/stretch' 로 이동하면 위젯 모드도 자연히 해제된다
+  }, [settings.stretchMin, setScreen])
 
   const resetSession = useCallback(() => {
     setElapsedSec(0)
