@@ -1,7 +1,7 @@
 /**
  * 노트북 웹캠 랜드마크 & 사용자 선택 기반 실시간 환경 진단 엔진.
  * 1) 노트북 배치 (정면 / 우측 측면 / 좌측 측면 ➔ 모두 정상적인 작업 셋업으로 인정)
- * 2) 화면 및 시선 높이 (고개 숙임 / 적정 / 거치대 권장)
+ * 2) 화면 및 시선 높이 (측면 앵글 시선 왜곡 자동 보정 + 고개 숙임 정밀 감지)
  * 를 인체공학적 상태 기반으로 정밀하게 판정합니다.
  */
 
@@ -33,15 +33,19 @@ export function analyzeEnvironment(calibration, overrideView = null) {
     }
   }
 
-  if (laptopSetup === 'side_right') {
+  const isSideRight = laptopSetup === 'side_right'
+  const isSideLeft = laptopSetup === 'side_left'
+  const isSide = isSideRight || isSideLeft
+
+  if (isSideRight) {
     laptopText = yawDeg !== 0 ? `우측 측면 배치 (약 ${Math.abs(yawDeg)}°)` : '우측 측면 배치'
-  } else if (laptopSetup === 'side_left') {
+  } else if (isSideLeft) {
     laptopText = yawDeg !== 0 ? `좌측 측면 배치 (약 ${Math.abs(yawDeg)}°)` : '좌측 측면 배치'
   } else {
     laptopText = '정면 정렬'
   }
 
-  // 2. 화면 및 시선 높이 정밀 계산 (자연스러운 인체공학 영점 보정)
+  // 2. 화면 및 시선 높이 정밀 계산 (측면 앵글 적응형 기하 보정)
   let gazeAngle = -4
   let gazeStatus = 'ok'
   let headXOffset = 0
@@ -53,27 +57,47 @@ export function analyzeEnvironment(calibration, overrideView = null) {
     const leftShoulder = landmarks[11]
     const rightShoulder = landmarks[12]
 
-    // 1) 코-양귀 수직 편차 (정면 응시 시 ~0.01)
-    const earMidY = (leftEar.y + rightEar.y) / 2
-    const earDelta = nose.y - earMidY
+    // 측면 촬영 시 반대편 귀 가려짐(Self-Occlusion) 방지: 카메라에 가까운 기준 귀 선택
+    const nearEar = isSideRight ? rightEar : isSideLeft ? leftEar : null
+    const farEar = isSideRight ? leftEar : isSideLeft ? rightEar : null
 
-    // 2) 어깨선 대비 코 높이 비율 (어깨 너비 정규화, 정면 바른자세: ~0.65~0.75)
+    // 귀 중심 y좌표 (가려진 귀의 신뢰도가 낮으면 nearEar 가중치 강화)
+    let earRefY
+    if (nearEar && farEar) {
+      const nearVis = nearEar.visibility ?? 1
+      const farVis = farEar.visibility ?? 1
+      if (nearVis > farVis + 0.2) {
+        earRefY = nearEar.y * 0.75 + farEar.y * 0.25
+      } else {
+        earRefY = (nearEar.y + farEar.y) / 2
+      }
+    } else {
+      earRefY = (leftEar.y + rightEar.y) / 2
+    }
+
+    const earDelta = nose.y - earRefY
+
+    // 어깨 중심선 및 어깨 너비 (측면 투영 시 단축 왜곡 보정)
     const scY = (leftShoulder.y + rightShoulder.y) / 2
-    const sw = Math.hypot(leftShoulder.x - rightShoulder.x, leftShoulder.y - rightShoulder.y) || 0.35
+    const rawSw = Math.hypot(leftShoulder.x - rightShoulder.x, leftShoulder.y - rightShoulder.y) || 0.35
+    const sw = isSide ? rawSw * 1.18 : rawSw // 측면 뷰일 때 투영 축소 보정
     const headDownRatio = (scY - nose.y) / sw
 
-    // 3) 고개 숙임 편차 (0.60 미만으로 떨어질 때 숙임으로 인식)
-    const headDownDrop = Math.max(0, 0.60 - headDownRatio)
-    const flexionFactor = (earDelta * 160) + (headDownDrop * 35)
+    // 측면/정면 맞춤 굴곡각 계산
+    const headDownDrop = Math.max(0, 0.58 - headDownRatio)
+    const flexionFactor = (earDelta * (isSide ? 140 : 160)) + (headDownDrop * 35)
 
-    // 시선 각도 산출 (-3° ~ -6°: 자연스러운 정면 응시)
+    // 시선 각도 산출
     gazeAngle = Math.round(-flexionFactor - 3)
 
-    // 인체공학 판정: -13° 이하일 때만 확실한 고개 숙임으로 판정
-    if (gazeAngle <= -13) {
+    // 인체공학 판정 (측면에서는 ±14°까지 자연스러운 듀얼 모니터 시선 이동으로 수용)
+    const lowThreshold = isSide ? -15 : -13
+    const highThreshold = isSide ? 6 : 5
+
+    if (gazeAngle <= lowThreshold) {
       gazeStatus = 'low'
       headXOffset = 12
-    } else if (gazeAngle >= 5) {
+    } else if (gazeAngle >= highThreshold) {
       gazeStatus = 'high'
       headXOffset = 0
     } else {
