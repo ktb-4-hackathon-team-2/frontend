@@ -6,6 +6,7 @@ import { CameraView } from '../components/CameraView'
 import { Btn, Card, Chip, Icon, MicroLabel, PostureFigure, TONE } from '../components/ui'
 import { REGION_LABEL } from '../data/dummy'
 import { fmtClock, fmtDur, fmtDurShort } from '../lib/format'
+import { SettingsPanel } from '../components/SettingsPanel'
 
 // 3×3 삼분할 격자 — 프레이밍 참고선
 function drawGrid(canvas) {
@@ -306,6 +307,12 @@ export default function Monitor() {
             </Btn>
           </div>
         </Card>
+      </div>
+
+      {/* 설정 — 모니터링 화면에서 바로 조절 (설정 화면과 동일한 패널) */}
+      <div className="col-span-12 mt-2">
+        <MicroLabel className="mb-3">설정</MicroLabel>
+        <SettingsPanel />
       </div>
     </div>
   )
