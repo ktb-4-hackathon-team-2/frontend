@@ -9,73 +9,99 @@ import { fmtClock } from '../lib/format'
 import { playChime } from '../lib/sound'
 
 // ── 스켈레톤 기반 목표 자세 가이드 ────────────────────────────────────
-// 거울 미리보기 기준(사용자가 보는 방향)으로 그린다.
+// 거울 미리보기 기준(사용자가 보는 방향). 카메라 오버레이와 같은 계열의
+// 가는 선 + 관절 점 스타일 — 몸통은 또렷하게, 팔은 흐리게(동작 목표선).
 const GUIDES = {
-  neck_side_left: { head: [96, 38] },
-  neck_side_right: { head: [124, 38] },
+  neck_side_left: { head: [96, 36] },
+  neck_side_right: { head: [124, 36] },
   chin_tuck: {
-    head: [110, 42],
-    marks: ['M84 34 l7 7 -7 7', 'M136 34 l-7 7 7 7'],
+    head: [110, 40],
+    marks: ['M86 33 l6 6 -6 6', 'M134 33 l-6 6 6 6'],
   },
   shoulder_shrug: {
-    head: [110, 34],
+    head: [110, 32],
     shoulders: [
-      [80, 56],
-      [140, 56],
+      [80, 52],
+      [140, 52],
     ],
-    marks: ['M72 46 l7 -7 7 7', 'M134 46 l7 -7 7 7'],
+    marks: ['M68 44 l6 -6 6 6', 'M140 44 l6 -6 6 6'],
   },
   chest_opener: {
     armL: [
-      [80, 64],
-      [48, 62],
-      [18, 60],
+      [80, 62],
+      [48, 60],
+      [18, 58],
     ],
     armR: [
-      [140, 64],
-      [172, 62],
-      [202, 60],
+      [140, 62],
+      [172, 60],
+      [202, 58],
     ],
   },
   arms_up: {
     armL: [
-      [84, 64],
-      [78, 36],
-      [76, 12],
+      [84, 62],
+      [76, 34],
+      [72, 12],
     ],
     armR: [
-      [136, 64],
-      [142, 36],
-      [144, 12],
+      [136, 62],
+      [144, 34],
+      [148, 12],
     ],
   },
 }
 
+const JADE = '#3ec98f'
+
 function SkeletonGuide({ id, className = '' }) {
   const g = GUIDES[id] || {}
-  const head = g.head || [110, 36]
+  const head = g.head || [110, 34]
   const sh = g.shoulders || [
-    [80, 64],
-    [140, 64],
+    [80, 62],
+    [140, 62],
   ]
   const shY = sh[0][1]
-  const armL = g.armL || [sh[0], [sh[0][0] - 8, shY + 22], [sh[0][0] - 12, shY + 42]]
-  const armR = g.armR || [sh[1], [sh[1][0] + 8, shY + 22], [sh[1][0] + 12, shY + 42]]
+  const armL = g.armL || [sh[0], [sh[0][0] - 7, shY + 24], [sh[0][0] - 10, shY + 46]]
+  const armR = g.armR || [sh[1], [sh[1][0] + 7, shY + 24], [sh[1][0] + 10, shY + 46]]
   const poly = (pts) => pts.map((p, i) => `${i ? 'L' : 'M'}${p[0]} ${p[1]}`).join(' ')
+
+  // 목: 어깨 중앙 → 머리 원의 가장자리까지 (원 안으로 파고들지 않게)
+  const neckBase = [110, shY - 4]
+  const ndx = head[0] - neckBase[0]
+  const ndy = head[1] - neckBase[1]
+  const nlen = Math.hypot(ndx, ndy) || 1
+  const neckEnd = [head[0] - (ndx / nlen) * 11, head[1] - (ndy / nlen) * 11]
 
   return (
     <svg viewBox="0 0 220 150" className={className} fill="none" aria-hidden>
-      <g stroke="#3ec98f" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round">
-        <path d={`M${sh[0][0]} ${shY} L${sh[1][0]} ${sh[1][1]}`} />
-        <path d={`M110 ${shY} L110 112`} />
-        <path d="M88 112 L132 112" opacity="0.5" />
-        <path d={`M110 ${shY} L${head[0]} ${head[1] + 8}`} />
+      {/* 팔 — 흐리게 (따라 해야 할 동작 라인) */}
+      <g stroke={JADE} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.35">
         <path d={poly(armL)} />
         <path d={poly(armR)} />
       </g>
-      <circle cx={head[0]} cy={head[1]} r="11" fill="#3ec98f" />
+      {[armL[1], armL[2], armR[1], armR[2]].map((p, i) => (
+        <circle key={`aj${i}`} cx={p[0]} cy={p[1]} r="3" fill={JADE} opacity="0.35" />
+      ))}
+
+      {/* 몸통 — 또렷하게 */}
+      <g stroke={JADE} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.9">
+        <circle cx={head[0]} cy={head[1]} r="11" fill="rgba(62, 201, 143, 0.08)" />
+        <path d={`M${neckBase[0]} ${neckBase[1]} L${neckEnd[0].toFixed(1)} ${neckEnd[1].toFixed(1)}`} />
+        <path d={`M${sh[0][0]} ${shY} Q110 ${shY - 11} ${sh[1][0]} ${sh[1][1]}`} />
+        <path d={`M110 ${shY - 3} L110 108`} />
+        <path d="M92 108 Q110 115 128 108" opacity="0.6" />
+      </g>
+
+      {/* 관절 점 — 어깨는 또렷, 골반은 옅게 */}
+      {sh.map((p, i) => (
+        <circle key={`sj${i}`} cx={p[0]} cy={p[1]} r="3" fill={JADE} opacity="0.9" />
+      ))}
+      <circle cx="92" cy="108" r="2.5" fill={JADE} opacity="0.45" />
+      <circle cx="128" cy="108" r="2.5" fill={JADE} opacity="0.45" />
+
       {(g.marks || []).map((d) => (
-        <path key={d} d={d} stroke="rgba(255,255,255,0.4)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path key={d} d={d} stroke="rgba(255, 255, 255, 0.35)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       ))}
     </svg>
   )

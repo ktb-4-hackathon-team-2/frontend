@@ -35,30 +35,33 @@ const isFuture = (d) => dateNum(d) > dateNum(TODAY)
 
 const rateTone = (v) => (v >= 80 ? TONE.good : v >= 65 ? TONE.warn1 : TONE.warn2)
 
-function DayCell({ date, data, onSelect }) {
+// 주 내 유지율 순위별 제이드 진하기 — 그 주에서 1등이 가장 진하고 꼴등이 가장 연하다.
+const ALPHA_MAX = 0.4
+const ALPHA_MIN = 0.05
+const JADE = (a) => `rgba(62, 201, 143, ${a})`
+
+function DayCell({ date, data, onSelect, alpha }) {
   const future = isFuture(date)
   const today = date === TODAY
   const dayNumber = date.split('/')[1]
   const hasData = Boolean(data && data.hasData && data.rate != null)
-  const tone = hasData ? rateTone(data.rate) : null
 
   return (
     <button
       disabled={!hasData}
       onClick={() => onSelect(date)}
+      style={
+        hasData && alpha != null
+          ? { backgroundColor: JADE(alpha), borderColor: JADE(Math.min(alpha + 0.18, 0.7)) }
+          : undefined
+      }
       className={`flex min-h-[132px] flex-col rounded-xl border p-3 text-left transition-all duration-150 ${
-        hasData ? 'cursor-pointer' : 'cursor-default opacity-40'
-      } ${
-        today
-          ? 'border-good/50 bg-good/[0.07]'
-          : hasData
-            ? 'border-line bg-surface hover:border-line-strong hover:bg-white/[0.03]'
-            : 'border-line bg-surface'
-      }`}
+        hasData ? 'cursor-pointer hover:brightness-110' : 'cursor-default border-line bg-surface opacity-40'
+      } ${today ? 'ring-1 ring-good/70' : ''}`}
     >
       <div className="flex items-baseline justify-between">
         <span className="font-mono text-lg font-semibold">{dayNumber}</span>
-        {today && <span className="rounded bg-good/15 px-1.5 py-0.5 text-[10px] font-medium text-good">오늘</span>}
+        {today && <span className="rounded bg-ink/40 px-1.5 py-0.5 text-[10px] font-medium text-good">오늘</span>}
       </div>
       {hasData ? (
         <>
@@ -66,10 +69,7 @@ function DayCell({ date, data, onSelect }) {
             <span className="font-mono text-xl font-semibold leading-none">{data.rate}</span>
             <span className="text-xs text-mid">%</span>
           </div>
-          <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/[0.08]">
-            <div className={`h-full rounded-full ${tone?.bg ?? 'bg-good'}`} style={{ width: `${data.rate}%` }} />
-          </div>
-          <span className="mt-1.5 text-[11px] text-dim">알림 {data.alertCount ?? 0}회</span>
+          <span className="mt-1.5 text-[11px] text-mid">알림 {data.alertCount ?? 0}회</span>
         </>
       ) : (
         <span className="mt-auto text-[11px] text-dim">{future ? '—' : '기록 없음'}</span>
@@ -400,6 +400,14 @@ export default function Report() {
   const totalAlerts = validData.reduce((a, x) => a + (x.alertCount ?? 0), 0)
   const goalDays = validData.filter((x) => x.rate >= 70).length
 
+  // 주 내 유지율 순위 → 진하기 균등 분배 (1등 ALPHA_MAX, 꼴등 ALPHA_MIN)
+  const ranked = [...validData].sort((a, b) => b.rate - a.rate).map((x) => x.d)
+  const alphaFor = (date) => {
+    const i = ranked.indexOf(date)
+    if (i === -1) return null
+    return ranked.length > 1 ? ALPHA_MAX - (i * (ALPHA_MAX - ALPHA_MIN)) / (ranked.length - 1) : ALPHA_MAX
+  }
+
   return (
     <div>
       <ScreenHeader title="자세 리포트" desc="주 단위 실측 기록이에요 — 날짜를 누르면 그날의 상세 리포트로 들어갑니다." />
@@ -420,8 +428,18 @@ export default function Report() {
       </div>
       <div className="rise d2 grid grid-cols-7 gap-2.5">
         {week.days.map((d) => (
-          <DayCell key={d} date={d} data={dbDaysMap[d]} onSelect={setSelected} />
+          <DayCell key={d} date={d} data={dbDaysMap[d]} onSelect={setSelected} alpha={alphaFor(d)} />
         ))}
+      </div>
+
+      {/* 주 내 순위 범례 — 색은 이 주 안에서의 상대 순위 */}
+      <div className="rise d3 mt-3 flex items-center justify-end gap-2">
+        <span className="text-[10px] text-dim">이 주 최저</span>
+        <span
+          className="h-3 w-24 rounded-[3px] border border-line"
+          style={{ background: `linear-gradient(to right, ${JADE(ALPHA_MIN)}, ${JADE(ALPHA_MAX)})` }}
+        />
+        <span className="text-[10px] text-dim">최고</span>
       </div>
 
       {/* 주간 요약 */}
