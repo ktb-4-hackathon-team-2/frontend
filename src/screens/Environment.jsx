@@ -48,12 +48,12 @@ function DynamicDeskDiagram({ data }) {
       </text>
 
       {/* 모니터 거치대 권장 높이 */}
-      <g stroke={gazeColor} strokeWidth="1.2">
+      <g stroke={gazeColor} strokeWidth={1.2}>
         <line x1="430" y1="55" x2="430" y2="68" />
-        <path d={gazeAngle < -10 ? "M426 61 L430 55 L434 61" : "M426 62 L430 68 L434 62"} fill="none" />
+        <path d={!isGazeOk ? "M426 61 L430 55 L434 61" : "M426 62 L430 68 L434 62"} fill="none" />
       </g>
       <text x="438" y="65" fontSize="10" fill={gazeColor} fontFamily="IBM Plex Mono, monospace">
-        {gazeAngle < -10 ? '+거치대 권장' : '적정 높이'}
+        {!isGazeOk ? '+거치대 권장' : '적정 높이'}
       </text>
     </svg>
   )
