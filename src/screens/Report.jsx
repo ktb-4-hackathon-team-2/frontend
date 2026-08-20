@@ -154,11 +154,11 @@ function DayReport({ date, dayData, onBack }) {
     <div>
       <div className="rise mb-6 flex items-end justify-between gap-4">
         <div>
-          <button onClick={onBack} className="flex cursor-pointer items-center gap-1 text-xs text-dim transition-colors hover:text-mid">
-            <Icon name="chevronRight" size={12} className="rotate-180" />
+          <Btn size="sm" kind="outline" onClick={onBack}>
+            <Icon name="chevronRight" size={13} className="rotate-180" />
             주간 리포트로
-          </button>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight">
+          </Btn>
+          <h1 className="mt-3 text-2xl font-bold tracking-tight">
             {date} ({dayData?.dow ?? '오늘'}) 상세 리포트
           </h1>
         </div>
