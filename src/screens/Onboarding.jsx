@@ -202,62 +202,46 @@ function FigureCycle() {
   )
 }
 
+// 홀드 캡처 — 체크를 모두 만족한 채 3초 유지하면 그동안 쌓인 스켈레톤을 평균낸다
+const CAL_TICK_MS = 150
+const CAL_HOLD_MS = 3000
+
+// 스택된 스켈레톤들의 좌표 평균 — 손떨림·인식 노이즈를 상쇄한 기준 자세
+function averageLandmarks(stack) {
+  const n = stack.length
+  return stack[0].map((_, i) => ({
+    x: stack.reduce((sum, lm) => sum + lm[i].x, 0) / n,
+    y: stack.reduce((sum, lm) => sum + lm[i].y, 0) / n,
+    z: stack.reduce((sum, lm) => sum + lm[i].z, 0) / n,
+  }))
+}
+
 export default function Onboarding() {
   const { camera, setCalibrated, setCalibration, setScreen, resetSession, saveAiBaselineId, cameraView, setCameraView } = useApp()
   const { member } = useAuth()
   const [step, setStep] = useState(0)
-  const [count, setCount] = useState(null)
   const [flash, setFlash] = useState(false)
   const [referencePose, setReferencePose] = useState(null)
   const [poseState, setPoseState] = useState(null)
+  const [holdMs, setHoldMs] = useState(0) // 체크 충족 유지 시간
   const [aiCal, setAiCal] = useState({ status: 'idle', message: null })
   const videoRef = useRef(null)
   const guideCanvasRef = useRef(null)
-  const countRef = useRef(null)
+  // 체크 충족 동안 틱마다 쌓는 스켈레톤 임시 스택 — 하나라도 풀리면 통째로 초기화
+  const tempStackRef = useRef([])
   const pose = usePoseLandmarker(camera.status === 'active')
 
-  useEffect(() => () => clearInterval(countRef.current), [])
-
-  // 기준 자세 캡처 화면 실시간 감지
-  useEffect(() => {
-    if (step !== 3 || camera.status !== 'active' || pose.status !== 'ready') {
-      setPoseState(null)
-      return
-    }
-
-    const id = setInterval(() => {
-      const video = videoRef.current
-      const result = pose.detect(video)
-      const landmarks = result?.landmarks?.[0] ?? null
-      const state = { ...assessCalibrationPose(landmarks, cameraView), detected: Boolean(landmarks) }
-      setPoseState(state)
-      drawPose(guideCanvasRef.current, video, landmarks, state.aligned)
-    }, 150)
-
-    return () => clearInterval(id)
-  }, [camera.status, pose.detect, pose.status, step, cameraView])
-
-  const snap = () => {
-    const video = videoRef.current
-    if (!video || !video.videoWidth) return
-    const result = pose.detect(video)
-    const landmarks = result?.landmarks?.[0] ?? null
-    const nextPoseState = assessCalibrationPose(landmarks, cameraView)
-    if (!nextPoseState.aligned) {
-      setPoseState({ ...nextPoseState, detected: Boolean(landmarks) })
-      return
-    }
-
-    setReferencePose(copyLandmarks(landmarks))
+  // 3초 평균이 완성됐을 때 — 기준 저장 + (AI 모드) 서버 캘리브레이션
+  const finalizeCapture = (avgLandmarks, video) => {
+    setReferencePose(avgLandmarks)
     setFlash(true)
     setTimeout(() => setFlash(false), 500)
 
-    // AI 서버 모드면 선택한 cameraView 와 함께 서버 캘리브레이션
-    if (aiEnabled) {
+    if (aiEnabled && video) {
       setAiCal({ status: 'sending', message: null })
       aiApi
-        .calibrate({ 
-          image: captureFrame(video, 640, 0.75), 
+        .calibrate({
+          image: captureFrame(video, 640, 0.75),
           userId: String(member?.id || '1'),
           view: cameraView,
         })
@@ -280,21 +264,51 @@ export default function Onboarding() {
     }
   }
 
-  const startCapture = () => {
-    if (camera.status !== 'active' || pose.status !== 'ready' || count !== null || !poseState?.aligned) return
-    let n = 3
-    setCount(n)
-    countRef.current = setInterval(() => {
-      n -= 1
-      if (n <= 0) {
-        clearInterval(countRef.current)
-        setCount(null)
-        snap()
-      } else {
-        setCount(n)
-      }
-    }, 1000)
+  const retake = () => {
+    setReferencePose(null)
+    setAiCal({ status: 'idle', message: null })
+    tempStackRef.current = []
+    setHoldMs(0)
   }
+
+  // 기준 자세 캡처 — 실시간 감지 + 홀드 스택.
+  // 체크 3개가 모두 충족되면 틱마다 스켈레톤을 temp 에 쌓고, 3초를 채우면 평균내서 기준으로.
+  // 스트레칭과 달리 중간에 하나라도 풀리면 감쇠 없이 처음부터(초기화).
+  useEffect(() => {
+    if (step !== 3 || camera.status !== 'active' || pose.status !== 'ready') {
+      setPoseState(null)
+      tempStackRef.current = []
+      setHoldMs(0)
+      return
+    }
+
+    const id = setInterval(() => {
+      const video = videoRef.current
+      const result = pose.detect(video)
+      const landmarks = result?.landmarks?.[0] ?? null
+      const state = { ...assessCalibrationPose(landmarks, cameraView), detected: Boolean(landmarks) }
+      setPoseState(state)
+      drawPose(guideCanvasRef.current, video, landmarks, state.aligned)
+
+      if (referencePose) return // 이미 캡처 완료 — 미리보기만 유지
+
+      if (state.aligned && landmarks) {
+        tempStackRef.current.push(copyLandmarks(landmarks))
+        const held = tempStackRef.current.length * CAL_TICK_MS
+        setHoldMs(held)
+        if (held >= CAL_HOLD_MS) {
+          finalizeCapture(averageLandmarks(tempStackRef.current), video)
+          tempStackRef.current = []
+          setHoldMs(0)
+        }
+      } else {
+        tempStackRef.current = []
+        setHoldMs(0)
+      }
+    }, CAL_TICK_MS)
+
+    return () => clearInterval(id)
+  }, [camera.status, pose.detect, pose.status, step, cameraView, referencePose]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const finish = () => {
     const todayStr = new Date().toLocaleDateString()
@@ -321,10 +335,13 @@ export default function Onboarding() {
             <>
               <canvas ref={guideCanvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
               <SilhouetteOverlay poseState={poseState} view={cameraView} />
-              {count !== null && (
-                <div className="absolute inset-0 flex items-center justify-center bg-ink/40">
-                  <span key={count} className="zoom-in font-mono text-8xl font-semibold text-hi drop-shadow-lg">
-                    {count}
+              {!referencePose && holdMs > 0 && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <span
+                    key={Math.ceil((CAL_HOLD_MS - holdMs) / 1000)}
+                    className="zoom-in font-mono text-8xl font-semibold text-hi drop-shadow-lg"
+                  >
+                    {Math.ceil((CAL_HOLD_MS - holdMs) / 1000)}
                   </span>
                 </div>
               )}
@@ -427,7 +444,7 @@ export default function Onboarding() {
                     {cameraView === 'front' ? '정면 뷰' : cameraView === 'left_diagonal' ? '좌측 대각 뷰' : '우측 대각 뷰'}
                   </span>
                 </div>
-                <Btn size="sm" kind="ghost" className="ml-auto" onClick={startCapture}>
+                <Btn size="sm" kind="ghost" className="ml-auto" onClick={retake}>
                   다시 찍기
                 </Btn>
               </div>
@@ -446,14 +463,28 @@ export default function Onboarding() {
               )}
             </div>
           ) : (
-            <Btn
-              kind="primary"
-              onClick={startCapture}
-              disabled={camera.status !== 'active' || pose.status !== 'ready' || !poseState?.aligned || count !== null}
-            >
-              <Icon name="camera" size={15} />
-              {count !== null ? '캡처 중…' : '기준 자세 캡처'}
-            </Btn>
+            <div className="flex flex-col gap-2 rounded-xl border border-line bg-raised/50 p-3.5">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-xs font-medium text-mid">
+                  <Icon name="camera" size={13} className={holdMs > 0 ? 'text-good' : 'text-dim'} />
+                  {holdMs > 0
+                    ? `그대로 유지하세요 — ${Math.ceil((CAL_HOLD_MS - holdMs) / 1000)}초 뒤 자동 캡처`
+                    : '세 가지 체크를 모두 만족하면 자동으로 캡처가 시작돼요'}
+                </span>
+                <span className="font-mono text-[10px] text-dim">
+                  {(Math.min(holdMs, CAL_HOLD_MS) / 1000).toFixed(1)}s / 3s
+                </span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
+                <div
+                  className="h-full rounded-full bg-good transition-all duration-150"
+                  style={{ width: `${(Math.min(holdMs, CAL_HOLD_MS) / CAL_HOLD_MS) * 100}%` }}
+                />
+              </div>
+              <p className="text-[10px] leading-relaxed text-dim">
+                3초 동안의 스켈레톤을 평균 내서 기준 자세로 저장해요 — 중간에 체크가 풀리면 처음부터 다시.
+              </p>
+            </div>
           )}
           <div className="flex gap-2">
             <Btn kind="ghost" onClick={() => setStep(step - 1)}>
