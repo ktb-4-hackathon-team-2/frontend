@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../state/AppContext'
-import { useAuth } from '../state/AuthContext'
-import { aiApi, aiEnabled, captureFrame } from '../lib/aiApi'
 import { computeMetrics } from '../lib/postureDetector'
 import { drawPose } from '../lib/poseRules'
 import { CameraView } from '../components/CameraView'
@@ -217,56 +215,27 @@ function averageLandmarks(stack) {
 }
 
 export default function Onboarding() {
-  const { camera, setCalibrated, setCalibration, setScreen, resetSession, saveAiBaselineId, cameraView, setCameraView } = useApp()
-  const { member } = useAuth()
+  const { camera, setCalibrated, setCalibration, setScreen, resetSession, cameraView, setCameraView } = useApp()
   const [step, setStep] = useState(0)
   const [flash, setFlash] = useState(false)
   const [referencePose, setReferencePose] = useState(null)
   const [poseState, setPoseState] = useState(null)
   const [holdMs, setHoldMs] = useState(0) // 체크 충족 유지 시간
-  const [aiCal, setAiCal] = useState({ status: 'idle', message: null })
   const videoRef = useRef(null)
   const guideCanvasRef = useRef(null)
   // 체크 충족 동안 틱마다 쌓는 스켈레톤 임시 스택 — 하나라도 풀리면 통째로 초기화
   const tempStackRef = useRef([])
   const pose = usePoseLandmarker(camera.status === 'active')
 
-  // 3초 평균이 완성됐을 때 — 기준 저장 + (AI 모드) 서버 캘리브레이션
-  const finalizeCapture = (avgLandmarks, video) => {
+  // 3초 평균이 완성됐을 때 — 브라우저 로컬에 기준 자세 저장
+  const finalizeCapture = (avgLandmarks) => {
     setReferencePose(avgLandmarks)
     setFlash(true)
     setTimeout(() => setFlash(false), 500)
-
-    if (aiEnabled && video) {
-      setAiCal({ status: 'sending', message: null })
-      aiApi
-        .calibrate({
-          image: captureFrame(video, 640, 0.75),
-          userId: String(member?.id || '1'),
-          view: cameraView,
-        })
-        .then((res) => {
-          if (res.ok) {
-            saveAiBaselineId(res.baseline_id)
-            setAiCal({ status: 'ok', message: null })
-          } else {
-            setAiCal({ status: 'fail', message: res.messages?.[0] ?? '서버가 자세를 인식하지 못했어요 — 다시 찍어 주세요' })
-          }
-        })
-        .catch((err) =>
-          setAiCal({
-            status: 'fail',
-            message: err?.status
-              ? `AI 서버 오류 (HTTP ${err.status}): ${err.message} — 로컬 판정으로 동작해요`
-              : `${err?.message ?? 'AI 서버에 연결하지 못했어요'} — 로컬 판정으로 동작해요`,
-          }),
-        )
-    }
   }
 
   const retake = () => {
     setReferencePose(null)
-    setAiCal({ status: 'idle', message: null })
     tempStackRef.current = []
     setHoldMs(0)
   }
@@ -297,7 +266,7 @@ export default function Onboarding() {
         const held = tempStackRef.current.length * CAL_TICK_MS
         setHoldMs(held)
         if (held >= CAL_HOLD_MS) {
-          finalizeCapture(averageLandmarks(tempStackRef.current), video)
+          finalizeCapture(averageLandmarks(tempStackRef.current))
           tempStackRef.current = []
           setHoldMs(0)
         }
@@ -448,19 +417,6 @@ export default function Onboarding() {
                   다시 찍기
                 </Btn>
               </div>
-              {aiEnabled && aiCal.status !== 'idle' && (
-                <p
-                  className={`text-[10px] ${
-                    aiCal.status === 'fail' ? 'text-warn2' : aiCal.status === 'ok' ? 'text-good' : 'text-dim'
-                  }`}
-                >
-                  {aiCal.status === 'sending'
-                    ? 'AI 서버 캘리브레이션 등록 중…'
-                    : aiCal.status === 'ok'
-                    ? 'AI 서버 기준 자세 등록 완료'
-                    : aiCal.message}
-                </p>
-              )}
             </div>
           ) : (
             <div className="flex flex-col gap-2 rounded-xl border border-line bg-raised/50 p-3.5">

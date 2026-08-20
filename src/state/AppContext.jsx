@@ -184,17 +184,6 @@ export function AppProvider({ children }) {
     }
   }, [calibration])
 
-  // AI 서버 baseline — 캘리브레이션 한 컷 등록용 (실시간 판정에는 쓰지 않음)
-  const [aiBaselineId, setAiBaselineId] = useState(() => localStorage.getItem('bandeut.baselineId') || '')
-  const saveAiBaselineId = useCallback((id) => {
-    setAiBaselineId(id)
-    try {
-      localStorage.setItem('bandeut.baselineId', id)
-    } catch {
-      // 저장 실패는 치명적이지 않음 — 세션 동안은 state 로 유지
-    }
-  }, [])
-
   // 서버에 저장된 사용자 설정 불러오기 (민감도·알림음·알림 단계·스트레칭 주기)
   // — 앱 로드 시(토큰 보유) 그리고 로그인 완료 순간에 불러온다
   const { status: authStatus } = useAuth()
@@ -514,7 +503,6 @@ export function AppProvider({ children }) {
     tick, camera, detectionVideoRef, lastLandmarksRef, localDetection, pose,
     pipWindow, openFloatingWidget, closeFloatingWidget,
     cameraView, setCameraView,
-    aiBaselineId, saveAiBaselineId,
   }
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
