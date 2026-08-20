@@ -121,14 +121,29 @@
 @keyframes ga-tilt-r { 0%, 100% { transform: rotate(0deg); } 40%, 60% { transform: rotate(24deg); } }
 @keyframes ga-tuck { 0%, 100% { transform: translate(0, 0); } 40%, 60% { transform: translate(-11px, 2px); } }
 @keyframes ga-shrug { 0%, 100% { transform: translateY(0); } 40%, 60% { transform: translateY(-11px); } }
-@keyframes ga-swing-back { 0%, 100% { transform: rotate(0deg); } 40%, 60% { transform: rotate(138deg); } }
 @keyframes ga-raise-l { 0%, 100% { transform: rotate(150deg); } 40%, 60% { transform: rotate(0deg); } }
 @keyframes ga-raise-r { 0%, 100% { transform: rotate(-150deg); } 40%, 60% { transform: rotate(0deg); } }
 @keyframes ga-tuck-front { 0%, 100% { transform: translateY(0); } 40%, 60% { transform: translateY(5px); } }
 @keyframes ga-tilt-side { 0%, 100% { transform: translate(0, 0) rotate(0deg); } 40%, 60% { transform: translate(0, 4px) rotate(-8deg); } }
-@keyframes ga-spread-l { 0%, 100% { transform: rotate(-75deg); } 40%, 60% { transform: rotate(0deg); } }
-@keyframes ga-spread-r { 0%, 100% { transform: rotate(75deg); } 40%, 60% { transform: rotate(0deg); } }
 @keyframes ga-raise-side { 0%, 100% { transform: rotate(140deg); } 40%, 60% { transform: rotate(0deg); } }
+
+/* 가슴 열기 — 팔꿈치를 굽힌 시작 자세에서 어깨 높이로 양팔을 펼친다. */
+@keyframes chest-arm-left {
+  0%, 100% { d: path("M 80 62 L 63 75 L 96 78"); }
+  40%, 60% { d: path("M 80 62 L 62 62 L 24 62"); }
+}
+@keyframes chest-arm-right {
+  0%, 100% { d: path("M 140 62 L 157 75 L 124 78"); }
+  40%, 60% { d: path("M 140 62 L 158 62 L 196 62"); }
+}
+.chest-arm-left,
+.chest-arm-right {
+  animation-duration: 3s;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+.chest-arm-left { animation-name: chest-arm-left; }
+.chest-arm-right { animation-name: chest-arm-right; }
 .ga {
   animation-duration: 3s;
   animation-timing-function: ease-in-out;
