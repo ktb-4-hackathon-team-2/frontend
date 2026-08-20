@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useApp, DETECT_INTERVAL_MS } from '../state/AppContext'
+import { api, getAccessToken } from '../lib/api'
 import { drawPose } from '../lib/poseRules'
 import { CameraView } from '../components/CameraView'
 import { Btn, Card, Chip, Icon, MicroLabel, PostureFigure, TONE } from '../components/ui'
@@ -102,6 +103,38 @@ export default function Monitor() {
   const tone = TONE[meta.tone]
   const stretchTotal = settings.stretchMin * 60
   const stretchProgress = 1 - stretchLeft / stretchTotal
+
+  // 오늘·어제 기록 — 백엔드 대시보드에서 조회, 1분(집계 전송 주기)마다 갱신
+  const [serverToday, setServerToday] = useState(null)
+  const [yesterday, setYesterday] = useState(null)
+  useEffect(() => {
+    if (!getAccessToken()) return
+    const fetchDays = () => {
+      const now = new Date()
+      const todayKey = `${now.getMonth() + 1}/${now.getDate()}`
+      const y = new Date(Date.now() - 24 * 60 * 60 * 1000)
+      const yKey = `${y.getMonth() + 1}/${y.getDate()}`
+      api
+        .getReportDashboard()
+        .then((data) => {
+          const t = data?.days14?.find((d) => d.d === todayKey)
+          const yd = data?.days14?.find((d) => d.d === yKey)
+          if (t?.hasData) setServerToday(t)
+          if (yd?.hasData) setYesterday(yd)
+        })
+        .catch(() => {})
+    }
+    fetchDays()
+    const id = setInterval(fetchDays, 60_000)
+    return () => clearInterval(id)
+  }, [])
+
+  // 오늘 유지율 — 서버의 하루 전체 집계(여러 세션 누적) 우선, 없으면 이번 세션 실측
+  const sessionPct = localDetection.sessionRatio != null ? Math.round(localDetection.sessionRatio * 100) : null
+  const todayPct = serverToday?.rate ?? sessionPct
+  const todaySource = serverToday?.rate != null ? '오늘 전체 · 1분마다 갱신' : '이번 세션 실측'
+  const rateDelta = todayPct != null && yesterday?.rate != null ? todayPct - yesterday.rate : null
+  const alertDelta = yesterday?.alertCount != null ? alertCount - yesterday.alertCount : null
 
   return (
     <div className="grid grid-cols-12 gap-4">
@@ -220,10 +253,17 @@ export default function Monitor() {
         <Card className="rise d3 flex flex-col gap-2 p-5">
           <MicroLabel>오늘 유지율</MicroLabel>
           <div className="flex items-baseline gap-1.5">
-            <span className="font-mono text-[28px] font-semibold leading-none">87</span>
-            <span className="text-sm text-mid">%</span>
+            <span className="font-mono text-[28px] font-semibold leading-none">{todayPct ?? '—'}</span>
+            {todayPct != null && <span className="text-sm text-mid">%</span>}
           </div>
-          <div className="text-xs text-good">+4%p · 어제보다</div>
+          {rateDelta != null ? (
+            <div className={`text-xs ${rateDelta >= 0 ? 'text-good' : 'text-warn2'}`}>
+              {rateDelta >= 0 ? '+' : ''}
+              {rateDelta}%p · 어제보다
+            </div>
+          ) : (
+            <div className="text-xs text-dim">{todayPct != null ? todaySource : '측정 대기 중'}</div>
+          )}
         </Card>
         <Card className="rise d4 flex flex-col gap-2 p-5">
           <MicroLabel>알림 횟수</MicroLabel>
@@ -231,7 +271,14 @@ export default function Monitor() {
             <span className="font-mono text-[28px] font-semibold leading-none">{alertCount}</span>
             <span className="text-sm text-mid">회</span>
           </div>
-          <div className="text-xs text-good">−3회 · 어제보다</div>
+          {alertDelta != null ? (
+            <div className={`text-xs ${alertDelta <= 0 ? 'text-good' : 'text-warn2'}`}>
+              {alertDelta > 0 ? '+' : ''}
+              {alertDelta}회 · 어제보다
+            </div>
+          ) : (
+            <div className="text-xs text-dim">오늘 누적</div>
+          )}
         </Card>
         <Card className="rise d5 flex flex-col gap-2 p-5">
           <MicroLabel>모니터링 시간</MicroLabel>

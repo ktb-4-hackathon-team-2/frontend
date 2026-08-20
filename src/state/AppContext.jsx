@@ -285,6 +285,17 @@ export function AppProvider({ children }) {
         : alert.bad_duration_sec >= WARN1_AFTER_SEC ? 1
         : 0
       setPosture(level === 0 ? 'good' : `warn${level}`)
+      // 1분 집계 버퍼에 샘플 적재
+      const s = statsRef.current
+      s.samples.push({ ok: ev.posture_ok, score: ev.score })
+      for (const issue of ev.issues) s.issues[issue.code] = (s.issues[issue.code] ?? 0) + 1
+      if (alert.alert_level >= 1 && s.lastLevel < 1) s.alerts += 1
+      s.lastLevel = alert.alert_level
+
+      // 세션 누적 (오늘 유지율 실시간 표시 + 종료 요약)
+      sessionAggRef.current.total += 1
+      if (ev.posture_ok) sessionAggRef.current.good += 1
+
       setLocalDetection({
         status: 'tracking',
         score: ev.score,
@@ -295,19 +306,9 @@ export function AppProvider({ children }) {
         issues: [...ev.issues].sort((a, b) => b.severity - a.severity).map((i) => i.code),
         badDurationSec: alert.bad_duration_sec,
         reason: ev.issues[0]?.message ?? '기준 자세를 잘 유지하고 있어요',
+        sessionRatio: sessionAggRef.current.total > 0 ? sessionAggRef.current.good / sessionAggRef.current.total : null,
       })
       setTick((t) => t + 1)
-
-      // 1분 집계 버퍼에 샘플 적재
-      const s = statsRef.current
-      s.samples.push({ ok: ev.posture_ok, score: ev.score })
-      for (const issue of ev.issues) s.issues[issue.code] = (s.issues[issue.code] ?? 0) + 1
-      if (alert.alert_level >= 1 && s.lastLevel < 1) s.alerts += 1
-      s.lastLevel = alert.alert_level
-
-      // 세션 누적 (종료 요약의 유지율)
-      sessionAggRef.current.total += 1
-      if (ev.posture_ok) sessionAggRef.current.good += 1
     }, DETECT_INTERVAL_MS)
     return () => clearInterval(id)
   }, [calibrated, baselineMetrics, camera.status, paused, pose.detect, pose.status, screen, settings.sensitivity])
