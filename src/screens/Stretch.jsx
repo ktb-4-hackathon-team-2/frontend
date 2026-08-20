@@ -114,16 +114,13 @@ function MotionGuide({ id, view = 'front', className = '' }) {
 
   if (id === 'chin_tuck') {
     if (front) {
-      // 정면 — 판정(코가 귀선 대비 내려옴)과 동일한 모습: 머리가 살짝 내려온다
+      // 정면 — 깊이 방향 움직임은 보이지 않으므로 고개를 숙이지 않는 수평 정렬만 보여준다.
       return (
         <svg {...svgProps}>
           <FrontBase head={false} />
-          <g className="ga" style={ga('ga-tuck-front', '110px 47px')} stroke={JADE} strokeLinecap="round" fill="none">
-            <path d="M110 58 L110 49" strokeWidth="12" />
-            <circle cx="110" cy="34" r="15" fill={JADE} stroke="none" />
-          </g>
-          <path d="M84 28 l7 6 -7 6" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M136 28 l-7 6 7 6" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M110 58 L110 49" stroke={JADE} strokeWidth="12" strokeLinecap="round" />
+          <circle cx="110" cy="34" r="15" fill={JADE} stroke="none" />
+          <path d="M84 28 H136" stroke={ARROW} strokeWidth="2" strokeDasharray="4 5" strokeLinecap="round" />
         </svg>
       )
     }
@@ -212,12 +209,24 @@ function MotionGuide({ id, view = 'front', className = '' }) {
     return (
       <svg {...svgProps}>
         <FrontBase arms={false} />
-        <g className="ga" style={ga('ga-raise-l', '80px 62px')} stroke={JADE} strokeLinecap="round" strokeLinejoin="round" fill="none">
-          <path d="M80 62 L74 36 L70 14" strokeWidth="11" />
-        </g>
-        <g className="ga" style={ga('ga-raise-r', '140px 62px')} stroke={JADE} strokeLinecap="round" strokeLinejoin="round" fill="none">
-          <path d="M140 62 L146 36 L150 14" strokeWidth="11" />
-        </g>
+        <path
+          className="arms-up-left"
+          d="M80 62 L70 84 L67 108"
+          stroke={JADE}
+          strokeWidth="11"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        />
+        <path
+          className="arms-up-right"
+          d="M140 62 L150 84 L153 108"
+          stroke={JADE}
+          strokeWidth="11"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        />
         <path d="M52 32 L52 14" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" />
         <path d="M46 16 L52 5 L58 16 Z" fill={ARROW} />
         <path d="M168 32 L168 14" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" />
@@ -229,9 +238,15 @@ function MotionGuide({ id, view = 'front', className = '' }) {
   return (
     <svg {...svgProps}>
       <SideBase arm={false} />
-      <g className="ga" style={ga('ga-raise-side', '112px 66px')} stroke={JADE} strokeLinecap="round" strokeLinejoin="round" fill="none">
-        <path d="M112 66 L116 40 L118 16" strokeWidth="11" />
-      </g>
+      <path
+        className="arms-up-side"
+        d="M112 66 L126 88 L130 112"
+        stroke={JADE}
+        strokeWidth="11"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
       <path d="M142 30 L142 12" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" />
       <path d="M136 14 L142 3 L148 14 Z" fill={ARROW} />
     </svg>
@@ -279,6 +294,12 @@ function ActiveSession({ stretch, onExit }) {
   const timerMode = !rule || pose.status === 'error' || camBlocked
   const holdTarget = stretch.hold * 1000
   const frontOnlyGuide = stretch.id === 'chest_opener'
+  const frontGuideLabel = frontOnlyGuide
+    ? '정면 · 동작 순서'
+    : stretch.id === 'chin_tuck'
+      ? '정면 · 정렬 확인'
+      : '정면 · 카메라 판정 기준'
+  const sideGuideLabel = stretch.id === 'chin_tuck' ? '측면 · 실제 동작' : '측면 · 동작 이해'
 
   const [done, setDone] = useState(false)
   const [heldMs, setHeldMs] = useState(0)
@@ -405,7 +426,7 @@ function ActiveSession({ stretch, onExit }) {
             <div className="rounded-lg border border-line bg-surface/60 p-2">
               <div className="flex items-center gap-1.5 px-1 font-mono text-[9px] uppercase tracking-[0.15em] text-dim">
                 <Icon name="camera" size={10} />
-                {frontOnlyGuide ? '정면 · 동작 순서' : '정면 · 카메라 판정 기준'}
+                {frontGuideLabel}
               </div>
               <MotionGuide id={stretch.id} view="front" className={frontOnlyGuide ? 'h-40 w-full' : 'h-32 w-full'} />
             </div>
@@ -413,7 +434,7 @@ function ActiveSession({ stretch, onExit }) {
               <div className="rounded-lg border border-line bg-surface/60 p-2">
                 <div className="flex items-center gap-1.5 px-1 font-mono text-[9px] uppercase tracking-[0.15em] text-dim">
                   <Icon name="person" size={10} />
-                  측면 · 동작 이해
+                  {sideGuideLabel}
                 </div>
                 <MotionGuide id={stretch.id} view="side" className="h-32 w-full" />
               </div>
