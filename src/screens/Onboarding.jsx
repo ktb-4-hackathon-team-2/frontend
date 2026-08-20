@@ -630,11 +630,6 @@ export default function Onboarding() {
                   <span className="font-mono text-good">실루엣 고정</span> — 모니터링 시 같은 위치를 기준으로 비교
                 </div>
               </div>
-              <p className="mt-4 rounded-lg bg-white/[0.03] p-3 text-left text-xs leading-relaxed text-mid">
-                <Icon name="desk" size={13} className="mr-1.5 inline text-good" />
-                작업 환경에서 <span className="text-hi">개선 제안 2건</span>을 찾았어요 — 시작 후{' '}
-                <span className="text-hi">환경 가이드</span>에서 확인하세요.
-              </p>
             </Card>
 
             <Btn kind="primary" size="lg" className="mt-8" onClick={finish}>
