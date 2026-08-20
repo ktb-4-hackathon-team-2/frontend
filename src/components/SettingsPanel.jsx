@@ -15,7 +15,7 @@ const ALERT_LEVELS = [
 const SOUNDS = [
   { value: 'chime', name: '차임' },
   { value: 'wood', name: '우드' },
-  { value: 'funny', name: '펀니' },
+  { value: 'funny', name: '경고' },
   { value: 'none', name: '무음' },
 ]
 

@@ -667,7 +667,7 @@ export default function Onboarding() {
                   {[
                     ['chime', '차임'],
                     ['wood', '우드'],
-                    ['funny', '펀니'],
+                    ['funny', '경고'],
                     ['none', '무음'],
                   ].map(([v, name]) => (
                     <button
