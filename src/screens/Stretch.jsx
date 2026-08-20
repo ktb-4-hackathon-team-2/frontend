@@ -18,8 +18,8 @@ const ARROW = 'rgba(255, 255, 255, 0.6)'
 
 // 동시에 지켜야 할 체크포인트 (순서 아님)
 const MOTION_META = {
-  neck_side_left: { checkpoints: ['귀가 어깨에 닿는다는 느낌으로', '반대쪽 어깨는 끌려 올라가지 않게', '통증 없는 범위까지만'] },
-  neck_side_right: { checkpoints: ['귀가 어깨에 닿는다는 느낌으로', '반대쪽 어깨는 끌려 올라가지 않게', '통증 없는 범위까지만'] },
+  neck_side_left: { checkpoints: ['한쪽 손을 머리 위로 넘겨 머리 옆에 가볍게 대기', '귀가 어깨에 닿는다는 느낌으로 천천히 기울이기', '반대쪽 어깨는 끌려 올라가지 않게'] },
+  neck_side_right: { checkpoints: ['한쪽 손을 머리 위로 넘겨 머리 옆에 가볍게 대기', '귀가 어깨에 닿는다는 느낌으로 천천히 기울이기', '반대쪽 어깨는 끌려 올라가지 않게'] },
   chin_tuck: { checkpoints: ['시선은 정면 유지', '뒤통수를 뒤로 민다는 느낌', '이중턱이 만들어지면 잘 된 것'] },
   shoulder_shrug: { checkpoints: ['귀에 닿을 만큼 끌어올리기', '내릴 땐 힘을 툭 풀기', '호흡은 편안하게'] },
   chest_opener: {
@@ -80,6 +80,37 @@ function MotionGuide({ id, view = 'front', className = '' }) {
       return (
         <svg {...svgProps}>
           <FrontBase head={false} />
+          {left ? (
+            <>
+              <path
+                className="neck-arm-left"
+                d="M80 62 L73 86 L70 108"
+                stroke={JADE}
+                strokeWidth="11"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+              <g className="neck-hand-left" stroke={JADE} strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="70" cy="108" r="6" fill={JADE} stroke="none" />
+              </g>
+            </>
+          ) : (
+            <>
+              <path
+                className="neck-arm-right"
+                d="M140 62 L147 86 L150 108"
+                stroke={JADE}
+                strokeWidth="11"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+              <g className="neck-hand-right" stroke={JADE} strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="150" cy="108" r="6" fill={JADE} stroke="none" />
+              </g>
+            </>
+          )}
           <g className="ga" style={ga(left ? 'ga-tilt-l' : 'ga-tilt-r', '110px 60px')} stroke={JADE} strokeLinecap="round" fill="none">
             <path d="M110 58 L110 47" strokeWidth="12" />
             <circle cx="110" cy="34" r="15" fill={JADE} stroke="none" />
@@ -102,6 +133,18 @@ function MotionGuide({ id, view = 'front', className = '' }) {
     return (
       <svg {...svgProps}>
         <SideBase head={false} />
+        <path
+          className="neck-arm-side"
+          d="M112 66 L122 92 L128 112"
+          stroke={JADE}
+          strokeWidth="11"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        />
+        <g className="neck-hand-side" stroke={JADE} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="128" cy="112" r="6" fill={JADE} stroke="none" />
+        </g>
         <g className="ga" style={ga('ga-tilt-side', '118px 52px')} stroke={JADE} strokeLinecap="round" fill="none">
           <path d="M113 60 L120 47" strokeWidth="12" />
           <circle cx="123" cy="36" r="15" fill={JADE} stroke="none" />
@@ -114,13 +157,16 @@ function MotionGuide({ id, view = 'front', className = '' }) {
 
   if (id === 'chin_tuck') {
     if (front) {
-      // 정면 — 깊이 방향 움직임은 보이지 않으므로 고개를 숙이지 않는 수평 정렬만 보여준다.
+      // 정면 — 깊이 방향 이동은 겹친 실루엣으로, 고개를 숙이지 않는 정렬은 수직 목선으로 보여준다.
       return (
         <svg {...svgProps}>
           <FrontBase head={false} />
+          <path d="M78 16 L90 28" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" />
+          <path d="M84 28 H90 V22" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M142 16 L130 28" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" />
+          <path d="M136 28 H130 V22" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
           <path d="M110 58 L110 49" stroke={JADE} strokeWidth="12" strokeLinecap="round" />
           <circle cx="110" cy="34" r="15" fill={JADE} stroke="none" />
-          <path d="M84 28 H136" stroke={ARROW} strokeWidth="2" strokeDasharray="4 5" strokeLinecap="round" />
         </svg>
       )
     }
