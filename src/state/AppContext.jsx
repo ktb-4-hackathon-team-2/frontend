@@ -182,17 +182,6 @@ export function AppProvider({ children }) {
     }
   }, [calibration])
 
-  // AI 서버 baseline — 캘리브레이션 한 컷 등록용 (실시간 판정에는 쓰지 않음)
-  const [aiBaselineId, setAiBaselineId] = useState(() => localStorage.getItem('bandeut.baselineId') || '')
-  const saveAiBaselineId = useCallback((id) => {
-    setAiBaselineId(id)
-    try {
-      localStorage.setItem('bandeut.baselineId', id)
-    } catch {
-      // 저장 실패는 치명적이지 않음 — 세션 동안은 state 로 유지
-    }
-  }, [])
-
   // 1초 심장박동 — 모니터링 시간 + 스트레칭 카운트다운
   useEffect(() => {
     if (paused) return
@@ -489,7 +478,6 @@ export function AppProvider({ children }) {
     tick, camera, detectionVideoRef, lastLandmarksRef, localDetection, pose,
     pipWindow, openFloatingWidget, closeFloatingWidget,
     cameraView, setCameraView,
-    aiBaselineId, saveAiBaselineId,
   }
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
