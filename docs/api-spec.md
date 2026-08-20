@@ -395,10 +395,29 @@ JWT 서명 알고리즘은 시크릿 길이에 따라 자동 선택된다 (32바
 
 ---
 
-## 10. 확장 포인트
+## 10. 헬스체크 (Health Check)
+
+배포 상태 검증 및 CI/CD 롤백 감지용 엔드포인트. 인증(토큰) 없이 접근 가능하다.
+
+### GET `/health`, `/api/health`
+
+**요청 헤더**: 없음
+
+**응답 (200 OK)**:
+```json
+{
+  "status": "ok",
+  "service": "bandeut-backend"
+}
+```
+
+---
+
+## 11. 확장 포인트
 
 **제품 키를 서버에서도 강제하고 싶다면** — 현재는 프론트 화면 게이트 용도라 `/api/signup`·`/api/login` 을 직접 호출하면 통과한다.
 서버에서 막으려면 `SignupRequest`/`LoginRequest` 에 `productKey` 필드를 추가하고 서비스에서 검증하거나,
 `X-Product-Key` 헤더를 검사하는 인터셉터를 두 경로에 걸면 된다.
 
 **Refresh Token** — 현재는 Access Token 만 발급한다. 만료 시 재로그인이 필요하다.
+
