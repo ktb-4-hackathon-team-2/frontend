@@ -109,7 +109,7 @@ export function AlertLayer() {
               <div className="flex-1">
                 <div className="text-sm font-semibold">스트레칭 시간이에요</div>
                 <p className="mt-1 text-xs leading-relaxed text-mid">
-                  50분 가까이 집중했어요. 목과 어깨를 풀어줄 타이밍이에요.
+                  오랜 시간 동안 집중했어요. 목과 어깨를 풀어줄 타이밍이에요.
                 </p>
                 <div className="mt-3 flex gap-2">
                   <Btn size="sm" kind="primary" onClick={startStretchNow}>
