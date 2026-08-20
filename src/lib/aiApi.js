@@ -2,7 +2,10 @@
 // 실시간 판정은 프론트 온디바이스(src/lib/postureDetector.js — posture.py 포팅판)로 처리하고,
 // AI 서버는 캘리브레이션 baseline 등록과 (추후) 리포트 LLM 분석에만 사용한다.
 
-const AI_BASE = import.meta.env.VITE_AI_API_BASE ?? ''
+const AI_BASE =
+  import.meta.env.VITE_AI_URL ||
+  import.meta.env.VITE_AI_API_BASE ||
+  ''
 
 export const aiEnabled = Boolean(AI_BASE)
 
