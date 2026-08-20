@@ -14,7 +14,6 @@ import Monitor from './screens/Monitor'
 import Report from './screens/Report'
 import Stretch from './screens/Stretch'
 import Environment from './screens/Environment'
-import PostureGuide from './screens/PostureGuide'
 import AlertsDemo from './screens/AlertsDemo'
 import Settings from './screens/Settings'
 import Summary from './screens/Summary'
@@ -24,7 +23,6 @@ const SCREENS = {
   report: Report,
   stretch: Stretch,
   environment: Environment,
-  posture: PostureGuide,
   alerts: AlertsDemo,
   settings: Settings,
   summary: Summary,
