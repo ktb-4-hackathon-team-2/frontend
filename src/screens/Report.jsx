@@ -15,7 +15,9 @@ function getCurrentWeekDays() {
   const first = curr.getDate() - (curr.getDay() === 0 ? 6 : curr.getDay() - 1)
   const days = []
   for (let i = 0; i < 7; i++) {
-    const d = new Date(curr.setDate(first + i))
+    // Date 생성자가 월 경계 오버플로를 처리한다 — curr.setDate()로 원본을 변이시키면
+    // 두 번째 반복부터 기준 달이 어긋나 월 경계 주에서 엉뚱한 날짜가 나온다
+    const d = new Date(curr.getFullYear(), curr.getMonth(), first + i)
     days.push(`${d.getMonth() + 1}/${d.getDate()}`)
   }
   return days
@@ -148,6 +150,9 @@ function DayReport({ date, dayData, onBack }) {
   const aiComment = dailyDetail?.llmSummary || dailyDetail?.llmCommentary
   const highlights = dailyDetail?.llmHighlights || []
   const adviceList = dailyDetail?.llmAdvice || []
+  // AI 분석을 아직 안 한 날에도 백엔드가 안내용 placeholder 문구를 llmSummary로
+  // 내려주므로, 실제 분석 결과(하이라이트/조언 존재)일 때만 '분석 완료'로 취급한다
+  const analyzed = Boolean(aiComment && (highlights.length > 0 || adviceList.length > 0))
   const grade = dailyDetail?.grade
 
   return (
@@ -331,7 +336,7 @@ function DayReport({ date, dayData, onBack }) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <MicroLabel>AI 분석 코멘트</MicroLabel>
-                {aiComment && (
+                {analyzed && (
                   <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.14em] text-good">
                     <span className="h-1.5 w-1.5 rounded-full bg-good" />
                     분석 완료
@@ -342,7 +347,7 @@ function DayReport({ date, dayData, onBack }) {
               {/* AI 분석 요청 / 재생성 버튼 */}
               <Btn 
                 size="sm" 
-                kind={aiComment ? "outline" : "primary"}
+                kind={analyzed ? "outline" : "primary"}
                 disabled={analyzing || !hasData}
                 onClick={handleRequestAiAnalysis}
               >
@@ -354,13 +359,13 @@ function DayReport({ date, dayData, onBack }) {
                 ) : (
                   <>
                     <Icon name="sparkle" size={13} />
-                    {aiComment ? 'AI 분석 재생성' : 'AI 분석 리포트 생성'}
+                    {analyzed ? 'AI 분석 재생성' : 'AI 분석 리포트 생성'}
                   </>
                 )}
               </Btn>
             </div>
 
-            {aiComment ? (
+            {analyzed ? (
               <div className="mt-4 space-y-4">
                 <p className="text-sm leading-relaxed text-mid whitespace-pre-line bg-surface/40 p-4 rounded-xl border border-line">
                   {aiComment}
