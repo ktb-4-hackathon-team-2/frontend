@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { Card, MicroLabel } from './ui'
 
 // 차트 팔레트 — dataviz validate_palette.js 통과 조합 (surface #121517 기준)
@@ -18,17 +18,31 @@ function roundTop(x, y, w, h, r) {
 // 마우스 위치 기반 공용 툴팁
 function useTip() {
   const boxRef = useRef(null)
+  const tipRef = useRef(null)
   const [tip, setTip] = useState(null)
   const show = (e, content) => {
     const rect = boxRef.current?.getBoundingClientRect()
     if (!rect) return
-    const x = Math.min(Math.max(e.clientX - rect.left, 56), rect.width - 56)
-    setTip({ x, y: e.clientY - rect.top, ...content })
+    setTip({ x: e.clientX - rect.left, y: e.clientY - rect.top, ...content })
   }
   const hide = () => setTip(null)
+
+  // 렌더된 실제 폭을 재서 컨테이너 안으로 클램프 — absolute 요소는 left 지점부터
+  // 컨테이너 오른쪽 끝까지만 폭을 쓸 수 있어서, 고정 여백으로 클램프하면
+  // 오른쪽 구간에서 툴팁이 세로로 짜부라진다 (w-max와 세트로 동작).
+  useLayoutEffect(() => {
+    const box = boxRef.current
+    const node = tipRef.current
+    if (!tip || !box || !node) return
+    const half = node.offsetWidth / 2 + 4
+    const clamped = Math.min(Math.max(tip.x, half), Math.max(half, box.clientWidth - half))
+    if (Math.abs(clamped - tip.x) > 0.5) setTip((t) => (t ? { ...t, x: clamped } : t))
+  }, [tip])
+
   const el = tip && (
     <div
-      className="pointer-events-none absolute z-10 -translate-x-1/2 rounded-lg border border-line-strong bg-raised px-3 py-2 shadow-xl"
+      ref={tipRef}
+      className="pointer-events-none absolute z-10 w-max rounded-lg border border-line-strong bg-raised px-3 py-2 shadow-xl"
       style={{ left: tip.x, top: tip.y - 14, transform: 'translate(-50%, -100%)' }}
     >
       <div className="mb-1 text-[11px] font-medium text-mid">{tip.title}</div>
