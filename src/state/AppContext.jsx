@@ -140,8 +140,8 @@ export function AppProvider({ children }) {
     stretchMin: 50,
     sensitivity: 50, // 판정 민감도 슬라이더 (0=느슨 ~ 100=민감) → strictness 배율로 변환
   })
-  const [alertCount, setAlertCount] = useState(4)
-  const [elapsedSec, setElapsedSec] = useState(4 * 3600 + 32 * 60) // 오늘 누적 (더미로 시작)
+  const [alertCount, setAlertCount] = useState(0)
+  const [elapsedSec, setElapsedSec] = useState(0) // 이번 세션 경과 (새로고침 시 0부터)
   const [stretchLeft, setStretchLeft] = useState(50 * 60)
   const [stretchSuggest, setStretchSuggest] = useState(false)
   const [tick, setTick] = useState(0)
