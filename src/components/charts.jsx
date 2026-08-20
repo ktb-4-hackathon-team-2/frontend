@@ -350,19 +350,22 @@ export function HourlyChart({ data = [], yesterdayData = [], onSelectHour, selec
                 height={ih}
                 fill="transparent"
                 onMouseMove={(e) => {
+                  const mins = Math.round(
+                    d.monitoredMin != null ? d.monitoredMin : d.minuteCount != null ? d.minuteCount : d.hold || 0,
+                  )
                   const rows = [{ name: '오늘 유지율', value: `${d.rate}%`, color: VIZ1 }]
+                  if (mins > 0) {
+                    rows.push({ name: '측정 데이터', value: `${mins}분치` })
+                  }
                   if (yData) {
                     rows.push({ name: '어제 유지율', value: `${yData.rate}%`, color: VIZ2 })
                     rows.push({
                       name: '전일 대비',
-                      value: delta > 0 ? `+${delta}% (개선)` : delta < 0 ? `${delta}% (저하)` : '동일',
+                      value: delta > 0 ? `+${delta}%p (개선)` : delta < 0 ? `${delta}%p (저하)` : '동일',
                     })
                   }
-                  if (d.alerts != null) {
-                    rows.push({ name: '경고 알림', value: `${d.alerts}회` })
-                  }
                   show(e, {
-                    title: `${d.h} (클릭 시 원인 분석)`,
+                    title: mins > 0 ? `${d.h} (${mins}분 측정 · 클릭 시 원인 분석)` : `${d.h} (클릭 시 원인 분석)`,
                     rows,
                   })
                 }}

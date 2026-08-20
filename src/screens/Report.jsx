@@ -250,13 +250,22 @@ function DayReport({ date, dayData, onBack }) {
               <Card className="rise d4 h-full p-6 flex flex-col">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <MicroLabel>
-                      {selectedHourItem ? `${selectedHourItem.h} 원인 분석` : '경고 알림 원인 분석'}
-                    </MicroLabel>
+                    {selectedHourItem ? (
+                      <span className="text-sm font-bold text-hi flex items-center gap-1.5">
+                        <span>{selectedHourItem.h} 원인 분석</span>
+                        {selectedHourItem.monitoredMin ? (
+                          <span className="font-mono text-xs font-normal text-dim">
+                            ({Math.round(selectedHourItem.monitoredMin)}분 측정)
+                          </span>
+                        ) : null}
+                      </span>
+                    ) : (
+                      <MicroLabel>경고 알림 원인 분석</MicroLabel>
+                    )}
                     {selectedHourItem && (
                       <button
                         onClick={() => setSelectedHour(null)}
-                        className="cursor-pointer text-[10px] text-good hover:underline"
+                        className="cursor-pointer text-[10px] text-good hover:underline ml-1"
                       >
                         (전체 하루 보기)
                       </button>
@@ -269,7 +278,7 @@ function DayReport({ date, dayData, onBack }) {
                   <div className="mt-4 space-y-3.5 flex-1">
                     <p className="text-xs text-dim">
                       {selectedHourItem
-                        ? `${selectedHourItem.h} 동안 감지된 나쁜 자세 유형과 맞춤 스트레칭입니다.`
+                        ? '1시간 동안 감지된 나쁜 자세 유형과 맞춤 스트레칭입니다.'
                         : '오늘 주로 감지된 나쁜 자세 유형과 교정 스트레칭입니다.'}
                     </p>
                     {displayIssues.map((item, idx) => (
