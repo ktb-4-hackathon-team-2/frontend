@@ -251,7 +251,13 @@ function DayReport({ date, dayData, onBack }) {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <MicroLabel>
-                      {selectedHourItem ? `${selectedHourItem.h} 원인 분석` : '경고 알림 원인 분석'}
+                      {selectedHourItem
+                        ? `${selectedHourItem.h} 원인 분석${
+                            selectedHourItem.monitoredMin
+                              ? ` (${Math.round(selectedHourItem.monitoredMin)}분 측정)`
+                              : ''
+                          }`
+                        : '경고 알림 원인 분석'}
                     </MicroLabel>
                     {selectedHourItem && (
                       <button
@@ -269,7 +275,11 @@ function DayReport({ date, dayData, onBack }) {
                   <div className="mt-4 space-y-3.5 flex-1">
                     <p className="text-xs text-dim">
                       {selectedHourItem
-                        ? `${selectedHourItem.h} 동안 감지된 나쁜 자세 유형과 맞춤 스트레칭입니다.`
+                        ? `${selectedHourItem.h}${
+                            selectedHourItem.monitoredMin
+                              ? ` (${Math.round(selectedHourItem.monitoredMin)}분 측정)`
+                              : ''
+                          } 동안 감지된 나쁜 자세 유형과 맞춤 스트레칭입니다.`
                         : '오늘 주로 감지된 나쁜 자세 유형과 교정 스트레칭입니다.'}
                     </p>
                     {displayIssues.map((item, idx) => (
