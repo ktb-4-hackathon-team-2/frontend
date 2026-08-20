@@ -31,7 +31,7 @@ const SCREENS = {
 }
 
 function Topbar() {
-  const { meta, paused, setWidgetMode, posture, localDetection, pipWindow, openFloatingWidget, closeFloatingWidget } =
+  const { meta, paused, posture, localDetection, pipWindow, openFloatingWidget, closeFloatingWidget } =
     useApp()
   const tracking = localDetection.status === 'tracking'
   const score = tracking && localDetection.displayScore != null ? localDetection.displayScore : meta.score
@@ -58,10 +58,6 @@ function Topbar() {
           {pipWindow ? '플로팅 위젯 닫기' : '플로팅 위젯'}
         </Btn>
       )}
-      <Btn size="sm" kind="ghost" onClick={() => setWidgetMode(true)} title="앱을 접고 위젯만 남기기">
-        <Icon name="pip" size={13} />
-        위젯 모드
-      </Btn>
     </header>
   )
 }
