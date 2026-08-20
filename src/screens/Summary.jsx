@@ -98,6 +98,45 @@ export default function Summary() {
         </div>
       </Card>
 
+      {/* AI 코멘트 — 종료 시 자동 분석의 응답이 도착하면 채워진다 (로딩 → 결과/실패) */}
+      {s.aiRequested && (
+        <Card className="rise d2 mt-4 p-6">
+          <div className="flex items-center gap-2">
+            <MicroLabel>AI 분석 코멘트</MicroLabel>
+            {s.ai?.llmSummary && (
+              <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.14em] text-good">
+                <span className="h-1.5 w-1.5 rounded-full bg-good" />
+                분석 완료
+              </span>
+            )}
+          </div>
+          {s.ai?.llmSummary ? (
+            <div className="mt-3 space-y-3">
+              <p className="text-sm leading-relaxed text-mid whitespace-pre-line">{s.ai.llmSummary}</p>
+              {(s.ai.llmAdvice?.length ?? 0) > 0 && (
+                <ul className="space-y-1.5">
+                  {s.ai.llmAdvice.slice(0, 3).map((a, i) => (
+                    <li key={i} className="flex items-start gap-2 text-xs leading-relaxed text-mid">
+                      <span className="mt-0.5 shrink-0 text-good">•</span>
+                      {a}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : s.aiFailed ? (
+            <p className="mt-3 text-xs text-dim">
+              분석 요청이 실패했어요. 리포트 화면에서 다시 생성할 수 있습니다.
+            </p>
+          ) : (
+            <div className="mt-3 flex items-center gap-2 text-xs text-dim">
+              <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/15 border-t-white/60" />
+              AI가 오늘 데이터를 분석하고 있어요…
+            </div>
+          )}
+        </Card>
+      )}
+
       <div className="rise d3 mt-6 flex justify-center gap-3">
         <Btn kind="primary" onClick={restart}>
           <Icon name="video" size={15} />
