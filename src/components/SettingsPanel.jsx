@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { useApp } from '../state/AppContext'
 import { useAuth } from '../state/AuthContext'
+import { api } from '../lib/api'
 import { Btn, Card, Icon, MicroLabel, Toggle } from './ui'
 import { fmtClock } from '../lib/format'
 import { playChime } from '../lib/sound'
@@ -32,6 +34,27 @@ function Row({ label, desc, children }) {
 export function SettingsPanel() {
   const { settings, updateSetting, setCalibrated, stretchLeft, setStretchSuggest, calibration, cameraView, setCameraView } = useApp()
   const { member, logout } = useAuth()
+
+  // 서버 저장 상태: idle | saving | saved | error
+  const [saveState, setSaveState] = useState({ status: 'idle', at: null, message: null })
+  const handleSave = async () => {
+    setSaveState({ status: 'saving', at: null, message: null })
+    try {
+      await api.saveSettings({
+        sensitivity: settings.sensitivity,
+        sound: settings.sound,
+        maxAlertLevel: settings.maxAlertLevel,
+        stretchMin: settings.stretchMin,
+      })
+      setSaveState({ status: 'saved', at: new Date(), message: null })
+    } catch (err) {
+      setSaveState({
+        status: 'error',
+        at: null,
+        message: err?.status ? `저장 실패 (HTTP ${err.status}): ${err.message}` : (err?.message ?? '저장에 실패했어요'),
+      })
+    }
+  }
 
   return (
     <div>
@@ -237,12 +260,25 @@ export function SettingsPanel() {
         </Row>
       </Card>
 
-      <Card className="rise d5 flex items-start gap-3 border-dashed px-6 py-4">
-        <Icon name="wrench" size={15} className="mt-0.5 shrink-0 text-dim" />
-        <p className="text-xs leading-relaxed text-dim">
-          프로토타입 안내 — 판정은 온디바이스로 실측 동작해요. 좌측 하단 DEV 패널로 자세 상태를 수동
-          시뮬레이션할 수도 있습니다.
-        </p>
+      {/* 저장하기 — 민감도·알림음·알림 단계·스트레칭 주기를 계정에 저장 */}
+      <Card className="rise d5 mb-4 flex items-center gap-4 px-6 py-4">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium">설정 저장</div>
+          <p className="mt-0.5 text-xs leading-relaxed text-dim">
+            {saveState.status === 'saving'
+              ? '서버에 저장하는 중…'
+              : saveState.status === 'saved'
+                ? `저장됨 · ${saveState.at.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`
+                : saveState.status === 'error'
+                  ? saveState.message
+                  : '판정 민감도 · 알림음 · 알림 단계 · 스트레칭 주기가 계정에 저장돼요.'}
+          </p>
+        </div>
+        {saveState.status === 'saved' && <Icon name="check" size={16} className="shrink-0 text-good" />}
+        {saveState.status === 'error' && <Icon name="alert" size={16} className="shrink-0 text-warn2" />}
+        <Btn kind="primary" onClick={handleSave} disabled={saveState.status === 'saving'}>
+          {saveState.status === 'saving' ? '저장 중…' : '저장하기'}
+        </Btn>
       </Card>
     </div>
   )

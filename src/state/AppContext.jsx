@@ -14,6 +14,8 @@ import {
 } from '../lib/postureDetector'
 import { enqueueStats, flushStats } from '../lib/statsReporter'
 import { pipSupported, openPipWindow } from '../lib/pip'
+import { api, getAccessToken } from '../lib/api'
+import { useAuth } from './AuthContext'
 
 // 화면 ↔ URL 매핑 — screen 상태의 원천은 URL이다
 export const SCREEN_PATHS = {
@@ -84,7 +86,7 @@ export function AppProvider({ children }) {
   const [settings, setSettings] = useState({
     maxAlertLevel: 2, // 3단계는 옵트인
     soundOn: true,
-    sound: 'chime', // chime | wood | none
+    sound: 'chime', // chime | wood | funny | none — 기본값은 서버(api-spec 7-1)와 일치해야 함
     quietOn: false,
     quietFrom: '22:00',
     quietTo: '08:00',
@@ -181,6 +183,29 @@ export function AppProvider({ children }) {
       return null
     }
   }, [calibration])
+
+  // 서버에 저장된 사용자 설정 불러오기 (민감도·알림음·알림 단계·스트레칭 주기)
+  // — 앱 로드 시(토큰 보유) 그리고 로그인 완료 순간에 불러온다
+  const { status: authStatus } = useAuth()
+  useEffect(() => {
+    if (authStatus !== 'authed' || !getAccessToken()) return
+    api
+      .getSettings()
+      .then((s) => {
+        if (!s) return
+        setSettings((prev) => ({
+          ...prev,
+          ...(s.sensitivity != null ? { sensitivity: s.sensitivity } : {}),
+          ...(s.sound ? { sound: s.sound, soundOn: s.sound !== 'none' } : {}),
+          ...(s.maxAlertLevel != null ? { maxAlertLevel: s.maxAlertLevel } : {}),
+          ...(s.stretchMin != null ? { stretchMin: s.stretchMin } : {}),
+        }))
+        if (s.stretchMin != null) setStretchLeft(s.stretchMin * 60)
+      })
+      .catch(() => {
+        // 네트워크·서버 오류 — 기본값 유지 (GET은 미저장이어도 항상 200, api-spec 7-1)
+      })
+  }, [authStatus])
 
   // 1초 심장박동 — 모니터링 시간 + 스트레칭 카운트다운
   useEffect(() => {

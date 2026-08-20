@@ -71,4 +71,11 @@ export const api = {
 
   /** POST /api/reports/daily/analyze — AI 일일 리포트 분석 요청 / 재생성 */
   analyzeDailyReport: (date, token) => request(`/api/reports/daily/analyze${date ? `?date=${date}` : ''}`, { method: 'POST', token }),
+
+  // ── ⚙️ 사용자 설정 API (docs/api-spec.md 7-1) ──
+  /** GET /api/settings — 항상 200. 저장 전이면 서버가 기본값을 채워서 내려준다 (404 분기 불필요) */
+  getSettings: (token) => request('/api/settings', { token }),
+
+  /** PUT /api/settings — 저장(업서트). 4개 필드 전부 필수: sensitivity·sound·maxAlertLevel·stretchMin */
+  saveSettings: (payload, token) => request('/api/settings', { method: 'PUT', body: payload, token }),
 }
