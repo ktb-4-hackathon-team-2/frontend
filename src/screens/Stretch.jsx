@@ -22,7 +22,9 @@ const MOTION_META = {
   neck_side_right: { checkpoints: ['귀가 어깨에 닿는다는 느낌으로', '반대쪽 어깨는 끌려 올라가지 않게', '통증 없는 범위까지만'] },
   chin_tuck: { checkpoints: ['시선은 정면 유지', '뒤통수를 뒤로 민다는 느낌', '이중턱이 만들어지면 잘 된 것'] },
   shoulder_shrug: { checkpoints: ['귀에 닿을 만큼 끌어올리기', '내릴 땐 힘을 툭 풀기', '호흡은 편안하게'] },
-  chest_opener: { checkpoints: ['어깨를 뒤로 모으며 가슴 열기', '시선은 정면', '호흡은 천천히'] },
+  chest_opener: {
+    checkpoints: ['팔꿈치를 굽혀 손을 가슴 앞에 두고 시작', '팔꿈치를 옆으로 벌려 어깨 높이로 펼치기', '어깨를 으쓱하지 말고 시선은 정면'],
+  },
   arms_up: { checkpoints: ['손끝을 하늘로 민다는 느낌', '몸통이 좌우로 기울지 않게', '어깨는 귀에서 멀게'] },
 }
 
@@ -51,7 +53,7 @@ function FrontBase({ arms = true, head = true }) {
   )
 }
 
-// 측면 몸통 (톤 다운) — 깊이 방향 동작(턱 당기기·가슴 열기)용
+// 측면 몸통 (톤 다운) — 깊이 방향 동작(턱 당기기 등)용
 function SideBase({ arm = true, head = true }) {
   return (
     <g stroke={DIM} strokeLinecap="round" strokeLinejoin="round" fill="none">
@@ -175,33 +177,32 @@ function MotionGuide({ id, view = 'front', className = '' }) {
   }
 
   if (id === 'chest_opener') {
-    if (front) {
-      // 정면 — 판정(손목 간격 어깨너비 1.7배·어깨 높이)과 동일한 모습: 양팔을 수평으로 벌린다
-      return (
-        <svg {...svgProps}>
-          <FrontBase arms={false} />
-          <g className="ga" style={ga('ga-spread-l', '80px 62px')} stroke={JADE} strokeLinecap="round" strokeLinejoin="round" fill="none">
-            <path d="M80 62 L52 60 L24 58" strokeWidth="11" />
-          </g>
-          <g className="ga" style={ga('ga-spread-r', '140px 62px')} stroke={JADE} strokeLinecap="round" strokeLinejoin="round" fill="none">
-            <path d="M140 62 L168 60 L196 58" strokeWidth="11" />
-          </g>
-          <path d="M36 42 L22 42" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" />
-          <path d="M22 36 L12 42 L22 48 Z" fill={ARROW} />
-          <path d="M184 42 L198 42" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" />
-          <path d="M198 36 L208 42 L198 48 Z" fill={ARROW} />
-        </svg>
-      )
-    }
-    // 측면 — 팔이 앞에서 뒤로 넘어가는 깊이 방향 동작
+    // 정면 전용 — 팔꿈치를 굽힌 시작 자세에서 어깨 높이로 양팔을 펼친다.
     return (
       <svg {...svgProps}>
-        <SideBase arm={false} />
-        <g className="ga" style={ga('ga-swing-back', '112px 66px')} stroke={JADE} strokeLinecap="round" strokeLinejoin="round" fill="none">
-          <path d="M112 66 L140 70 L166 72" strokeWidth="11" />
-        </g>
-        <path d="M152 42 A46 46 0 0 1 76 54" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" fill="none" />
-        <path d="M82 46 L70 56 L84 60 Z" fill={ARROW} />
+        <FrontBase arms={false} />
+        <path
+          className="chest-arm-left"
+          d="M80 62 L63 75 L96 78"
+          stroke={JADE}
+          strokeWidth="11"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        />
+        <path
+          className="chest-arm-right"
+          d="M140 62 L157 75 L124 78"
+          stroke={JADE}
+          strokeWidth="11"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        />
+        <path d="M72 42 H28" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" />
+        <path d="M34 36 L24 42 L34 48 Z" fill={ARROW} />
+        <path d="M148 42 H192" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" />
+        <path d="M186 36 L196 42 L186 48 Z" fill={ARROW} />
       </svg>
     )
   }
@@ -277,6 +278,7 @@ function ActiveSession({ stretch, onExit }) {
   // 판정 룰이 없거나(턱 당기기) 카메라/모델을 못 쓰면 타이머로 진행
   const timerMode = !rule || pose.status === 'error' || camBlocked
   const holdTarget = stretch.hold * 1000
+  const frontOnlyGuide = stretch.id === 'chest_opener'
 
   const [done, setDone] = useState(false)
   const [heldMs, setHeldMs] = useState(0)
@@ -392,27 +394,29 @@ function ActiveSession({ stretch, onExit }) {
           </div>
         </div>
 
-        {/* 모션 가이드 — 시작↔목표 왕복 애니메이션 + 동시 체크포인트 */}
+        {/* 모션 가이드 — 가슴 열기는 정면 단일 가이드, 나머지는 정면·측면 가이드로 보여준다. */}
         <div className="rounded-xl border border-line bg-raised/60 p-4">
           <div className="flex items-center justify-between">
             <MicroLabel>모션 가이드</MicroLabel>
             <span className="font-mono text-[11px] text-dim">{stretch.hold}초 유지</span>
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-3">
+          <div className={`mt-3 grid gap-3 ${frontOnlyGuide ? 'grid-cols-1' : 'grid-cols-2'}`}>
             <div className="rounded-lg border border-line bg-surface/60 p-2">
               <div className="flex items-center gap-1.5 px-1 font-mono text-[9px] uppercase tracking-[0.15em] text-dim">
                 <Icon name="camera" size={10} />
-                정면 · 카메라 판정 기준
+                {frontOnlyGuide ? '정면 · 동작 순서' : '정면 · 카메라 판정 기준'}
               </div>
-              <MotionGuide id={stretch.id} view="front" className="h-32 w-full" />
+              <MotionGuide id={stretch.id} view="front" className={frontOnlyGuide ? 'h-40 w-full' : 'h-32 w-full'} />
             </div>
-            <div className="rounded-lg border border-line bg-surface/60 p-2">
-              <div className="flex items-center gap-1.5 px-1 font-mono text-[9px] uppercase tracking-[0.15em] text-dim">
-                <Icon name="person" size={10} />
-                측면 · 동작 이해
+            {!frontOnlyGuide && (
+              <div className="rounded-lg border border-line bg-surface/60 p-2">
+                <div className="flex items-center gap-1.5 px-1 font-mono text-[9px] uppercase tracking-[0.15em] text-dim">
+                  <Icon name="person" size={10} />
+                  측면 · 동작 이해
+                </div>
+                <MotionGuide id={stretch.id} view="side" className="h-32 w-full" />
               </div>
-              <MotionGuide id={stretch.id} view="side" className="h-32 w-full" />
-            </div>
+            )}
           </div>
           <div className="mt-2 border-t border-line pt-3">
             <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-dim">
