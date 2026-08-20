@@ -23,7 +23,21 @@ const vis = (p) => Boolean(p) && (p.visibility ?? 1) > 0.5
 const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y)
 
-const cond = (id, label, ok, value = null) => ({ id, label, ok, value })
+// progress: 기준 대비 현재 달성률 (1.0 = 기준 도달) — UI 에서 기준선 있는 바로 그린다
+const cond = (id, label, ok, value = null, progress = null) => ({ id, label, ok, value, progress })
+
+// 지표 EMA 평활화 — 100ms 틱의 랜드마크 노이즈로 바·수치가 요동치지 않게.
+// 판정(ok)과 표시(바·숫자)가 같은 평활값을 쓰므로 서로 어긋나지 않는다.
+// α=0.25 @ 100ms → 시상수 약 0.35초: 동작 변화는 곧장 따라가되 떨림은 걸러진다.
+const SMOOTH_ALPHA = 0.25
+function smooth(ctx, key, v) {
+  const ref = ctx?.ref
+  if (!ref) return v
+  const k = `_sm_${key}`
+  const next = ref[k] == null ? v : ref[k] + SMOOTH_ALPHA * (v - ref[k])
+  ref[k] = next
+  return next
+}
 const pack = (conds, hint) => ({ conds, all: conds.every((c) => c.ok), hint })
 const notVisible = () =>
   pack([cond('vis', '상반신이 프레임 안에', false)], '카메라에 얼굴과 어깨가 보이게 앉아 주세요')
@@ -53,20 +67,21 @@ function baseParts(lm) {
 // 거울 미리보기에서 사람 기준 방향과 화면에 보이는 방향이 일치한다.
 function neckSide(direction) {
   const label = direction === 'left' ? '왼' : '오른'
-  return (lm) => {
+  return (lm, ctx) => {
     const p = baseParts(lm)
     if (!p) return notVisible()
-    const t = direction === 'left' ? p.tilt : -p.tilt
+    const t = smooth(ctx, 'tilt', direction === 'left' ? p.tilt : -p.tilt)
+    const sa = Math.abs(smooth(ctx, 'sa', p.shoulderAngle))
     // 기울기 임계 13°: AI 서버(core/stretch.py)와 동일. 어깨 수평은 프론트 추가 가드.
     const conds = [
       cond('vis', '어깨까지 프레임 안에', true),
-      cond('tilt', `머리를 ${label}쪽으로 깊게 (13° 이상)`, t >= 13, `${Math.max(0, t).toFixed(0)}°`),
-      cond('level', '어깨는 수평 유지', Math.abs(p.shoulderAngle) <= 12, `${Math.abs(p.shoulderAngle).toFixed(0)}°`),
+      cond('tilt', `머리를 ${label}쪽으로 깊게 (13° 이상)`, t >= 13, `${Math.max(0, t).toFixed(0)}°`, t / 13),
+      cond('level', '어깨는 수평 유지', sa <= 12, `${sa.toFixed(0)}°`),
     ]
     let hint = null
     if (t <= -10) hint = `반대쪽이에요 — ${label}쪽으로 기울여 주세요`
     else if (t < 13) hint = '귀가 어깨에 닿는다는 느낌으로 조금 더'
-    else if (Math.abs(p.shoulderAngle) > 12) hint = '어깨가 따라 올라갔어요 — 힘을 빼세요'
+    else if (sa > 12) hint = '어깨가 따라 올라갔어요 — 힘을 빼세요'
     return pack(conds, hint)
   }
 }
@@ -79,7 +94,7 @@ function neckSide(direction) {
 function shoulderShrug(lm, ctx) {
   const p = baseParts(lm)
   if (!p) return notVisible()
-  const r = (p.shoulderMid.y - p.earMid.y) / p.sw
+  const r = smooth(ctx, 'r', (p.shoulderMid.y - p.earMid.y) / p.sw)
   const ref = ctx?.ref ?? {}
   ref.maxR = Math.max(ref.maxR ?? 0, r)
   ref.samples = (ref.samples ?? 0) + 1
@@ -88,7 +103,7 @@ function shoulderShrug(lm, ctx) {
   const lifted = warmedUp && lift >= 0.18
   const conds = [
     cond('vis', '어깨까지 프레임 안에', true),
-    cond('lift', '어깨를 귀 쪽으로 으쓱', lifted, warmedUp ? `${Math.round(lift * 100)}%` : null),
+    cond('lift', '어깨를 귀 쪽으로 으쓱', lifted, warmedUp ? `${Math.round(lift * 100)}%` : null, warmedUp ? lift / 0.18 : null),
   ]
   const hint = !warmedUp
     ? '잠시 편안히 앉아 주세요 — 기준을 잡는 중이에요'
@@ -99,7 +114,7 @@ function shoulderShrug(lm, ctx) {
 }
 
 // ── 가슴 열기 (양팔 벌리기) ──────────────────────────────────────────
-function chestOpener(lm) {
+function chestOpener(lm, ctx) {
   const p = baseParts(lm)
   if (!p) return notVisible()
   if (!vis(p.lw) || !vis(p.rw)) {
@@ -109,12 +124,12 @@ function chestOpener(lm) {
     )
   }
   // 벌림 임계 1.7배: AI 서버와 동일. 어깨 높이는 프론트 추가 가드.
-  const spread = Math.abs(p.lw.x - p.rw.x) / p.sw
+  const spread = smooth(ctx, 'spread', Math.abs(p.lw.x - p.rw.x) / p.sw)
   const heightOk =
     Math.abs(p.lw.y - p.shoulderMid.y) <= 0.6 * p.sw && Math.abs(p.rw.y - p.shoulderMid.y) <= 0.6 * p.sw
   const conds = [
     cond('vis', '어깨까지 프레임 안에', true),
-    cond('spread', '양팔을 옆으로 넓게 (어깨너비 1.7배)', spread >= 1.7, `${spread.toFixed(1)}배`),
+    cond('spread', '양팔을 옆으로 넓게 (어깨너비 1.7배)', spread >= 1.7, `${spread.toFixed(1)}배`, spread / 1.7),
     cond('height', '손은 어깨 높이에서 유지', heightOk),
   ]
   let hint = null
@@ -129,7 +144,7 @@ function chestOpener(lm) {
 function chinTuck(lm, ctx) {
   const p = baseParts(lm)
   if (!p) return notVisible()
-  const gap = (p.nose.y - p.earMid.y) / p.sw // 귀선 대비 코 높이 (아래로 양수)
+  const gap = smooth(ctx, 'gap', (p.nose.y - p.earMid.y) / p.sw) // 귀선 대비 코 높이 (아래로 양수)
   const ref = ctx?.ref ?? {}
   ref.minGap = Math.min(ref.minGap ?? gap, gap)
   const delta = gap - ref.minGap
@@ -137,7 +152,7 @@ function chinTuck(lm, ctx) {
   const overNod = delta > 0.16 // 당기기가 아니라 고개를 숙인 것
   const conds = [
     cond('vis', '어깨까지 프레임 안에', true),
-    cond('tuck', '턱을 뒤로 지그시 당기기', tucked && !overNod, `${Math.round(delta * 100)}%`),
+    cond('tuck', '턱을 뒤로 지그시 당기기', tucked && !overNod, `${Math.round(delta * 100)}%`, delta / 0.05),
     cond('level', '고개는 숙이지 말고 시선은 정면', !overNod),
   ]
   let hint = null
@@ -147,21 +162,27 @@ function chinTuck(lm, ctx) {
 }
 
 // ── 팔 위로 뻗기 ─────────────────────────────────────────────────────
-function armsUp(lm) {
+function armsUp(lm, ctx) {
   const p = baseParts(lm)
   if (!p) return notVisible()
   // 손목이 코보다 위: AI 서버와 동일 기준 (여유 마진 제거). 몸통 수평은 프론트 추가 가드.
   const handsVisible = vis(p.lw) && vis(p.rw)
-  const up = handsVisible && p.lw.y < p.nose.y && p.rw.y < p.nose.y
+  // 도달률 — 더 낮은 손 기준으로 어깨 높이 0% → 코 높이 100%. 판정도 같은 평활값(≥1)을 쓴다
+  const lowWy = handsVisible ? Math.max(p.lw.y, p.rw.y) : null
+  const reach = handsVisible
+    ? smooth(ctx, 'reach', (p.shoulderMid.y - lowWy) / Math.max(p.shoulderMid.y - p.nose.y, 0.01))
+    : null
+  const up = reach != null && reach >= 1
+  const sa = Math.abs(smooth(ctx, 'sa', p.shoulderAngle))
   const conds = [
     cond('vis', '어깨까지 프레임 안에', true),
-    cond('up', '양손을 머리 위로', up),
-    cond('level', '몸통은 좌우로 곧게', Math.abs(p.shoulderAngle) <= 12, `${Math.abs(p.shoulderAngle).toFixed(0)}°`),
+    cond('up', '양손을 머리 위로', up, reach != null ? `${Math.round(Math.max(0, reach) * 100)}%` : null, reach),
+    cond('level', '몸통은 좌우로 곧게', sa <= 12, `${sa.toFixed(0)}°`),
   ]
   let hint = null
   if (!handsVisible) hint = '손이 화면 밖으로 나갔어요 — 조금 뒤로 앉아 주세요'
   else if (!up) hint = '손끝을 하늘로 민다는 느낌으로 더 높이'
-  else if (Math.abs(p.shoulderAngle) > 12) hint = '몸통이 기울었어요 — 가운데로 곧게'
+  else if (sa > 12) hint = '몸통이 기울었어요 — 가운데로 곧게'
   return pack(conds, hint)
 }
 

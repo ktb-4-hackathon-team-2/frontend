@@ -573,10 +573,24 @@ function ActiveSession({ stretch, onExit }) {
         {tracking && live.conds ? (
           <div className="mt-4 flex flex-col gap-2">
             {live.conds.map((c) => (
-              <div key={c.id} className="flex items-center gap-2.5 text-xs">
-                <Icon name="check" size={13} className={c.ok ? 'text-good' : 'text-dim'} />
-                <span className={c.ok ? 'text-mid' : 'text-dim'}>{c.label}</span>
-                {c.value && <span className="ml-auto font-mono text-dim">{c.value}</span>}
+              <div key={c.id} className="flex flex-col gap-1">
+                <div className="flex items-center gap-2.5 text-xs">
+                  <Icon name="check" size={13} className={c.ok ? 'text-good' : 'text-dim'} />
+                  <span className={c.ok ? 'text-mid' : 'text-dim'}>{c.label}</span>
+                  {c.value && (
+                    <span className={`ml-auto font-mono ${c.ok ? 'font-semibold text-good' : 'text-dim'}`}>{c.value}</span>
+                  )}
+                </div>
+                {/* 기준선 있는 달성률 바 — 세로선(기준)을 넘으면 조건 충족, 넘는 순간 초록으로 */}
+                {c.progress != null && (
+                  <div className="relative ml-[23px] h-2 overflow-hidden rounded-full bg-white/[0.07]">
+                    <div
+                      className={`h-full rounded-full transition-all duration-150 ${c.ok ? 'bg-good' : 'bg-warn1/80'}`}
+                      style={{ width: `${(Math.min(Math.max(c.progress, 0), 1.2) / 1.2) * 100}%` }}
+                    />
+                    <span className="absolute top-0 h-full w-px bg-white/50" style={{ left: `${(1 / 1.2) * 100}%` }} />
+                  </div>
+                )}
               </div>
             ))}
             <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
@@ -585,7 +599,14 @@ function ActiveSession({ stretch, onExit }) {
                 style={{ width: `${(heldMs / holdTarget) * 100}%` }}
               />
             </div>
-            <p className="min-h-4 text-xs text-mid">{live.hint ?? (heldMs > 0 ? '좋아요 — 그대로 유지하세요' : ' ')}</p>
+            {/* 실시간 피드백 — 카메라에서 살짝 떨어져 있어도 읽히게 크게 */}
+            <p
+              className={`min-h-8 text-lg font-semibold leading-snug ${
+                live.hint ? 'text-warn1' : heldMs > 0 ? 'text-good' : 'text-mid'
+              }`}
+            >
+              {live.hint ?? (heldMs > 0 ? '좋아요 — 그대로 유지하세요' : ' ')}
+            </p>
           </div>
         ) : (
           <p className="mt-4 text-xs leading-relaxed text-dim">

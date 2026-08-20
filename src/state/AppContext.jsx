@@ -3,7 +3,7 @@ import { useRouter } from './RouterContext'
 import { useCamera } from '../hooks/useCamera'
 import { usePoseLandmarker } from '../hooks/usePoseLandmarker'
 import { POSTURE_META } from '../data/dummy'
-import { maybeChime } from '../lib/sound'
+import { maybeChime, maybeSiren } from '../lib/sound'
 import {
   AlertTracker,
   computeMetrics,
@@ -464,13 +464,13 @@ export function AppProvider({ children }) {
   // 실제 개입 단계는 설정 상한으로 캡. 데모 트리거는 상한을 무시하고 보여준다.
   const effectiveLevel = demoAlert || Math.min(warnLevel, settings.maxAlertLevel)
 
-  // 2단계 이상 경고가 새로 발생하면 알림 횟수 + 알림음
+  // 2단계 이상 경고가 새로 발생하면 알림 횟수 + 알림음.
+  // 3단계 진입 순간엔 선택한 알림음 대신 공습경보 사이렌 (0→3 직행 시 이중 재생 방지)
   const prevLevel = useRef(0)
   useEffect(() => {
-    if (effectiveLevel >= 2 && prevLevel.current < 2) {
-      setAlertCount((c) => c + 1)
-      maybeChime(settings)
-    }
+    if (effectiveLevel >= 2 && prevLevel.current < 2) setAlertCount((c) => c + 1)
+    if (effectiveLevel >= 3 && prevLevel.current < 3) maybeSiren(settings)
+    else if (effectiveLevel >= 2 && prevLevel.current < 2) maybeChime(settings)
     prevLevel.current = effectiveLevel
   }, [effectiveLevel, settings])
 

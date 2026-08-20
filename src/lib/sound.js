@@ -1,5 +1,6 @@
 // 알림음 — 차임/우드는 WebAudio 합성, 커스텀 알람은 번들된 WAV 재생.
 import funnyAlarmUrl from '../../static/funny_alarm.wav'
+import sirenUrl from '../../static/공습경보.wav'
 
 let audioCtx = null
 function ctx() {
@@ -7,19 +8,26 @@ function ctx() {
   return audioCtx
 }
 
-let funnyAudio = null
-function playFunnyAlarm() {
-  try {
-    if (!funnyAudio) {
-      funnyAudio = new Audio(funnyAlarmUrl)
-      funnyAudio.volume = 0.7
+// 번들 WAV 플레이어 — Audio 객체는 최초 1회만 만들어 재사용
+function makeWavPlayer(url, volume) {
+  let audio = null
+  return () => {
+    try {
+      if (!audio) {
+        audio = new Audio(url)
+        audio.volume = volume
+      }
+      audio.currentTime = 0
+      audio.play().catch(() => {})
+    } catch {
+      // 재생 실패는 치명적이지 않음
     }
-    funnyAudio.currentTime = 0
-    funnyAudio.play().catch(() => {})
-  } catch {
-    // 재생 실패는 치명적이지 않음
   }
 }
+
+const playFunnyAlarm = makeWavPlayer(funnyAlarmUrl, 0.7)
+// 3단계 전용 사이렌 — 전체 화면 개입과 함께 울린다
+export const playSiren = makeWavPlayer(sirenUrl, 0.8)
 
 export function isQuietNow({ quietOn, quietFrom, quietTo }) {
   if (!quietOn) return false
@@ -67,5 +75,12 @@ export function playChime(kind = 'chime') {
 export function maybeChime(settings) {
   if (settings.soundOn && settings.sound !== 'none' && !isQuietNow(settings)) {
     playChime(settings.sound)
+  }
+}
+
+// 3단계 경보 — 선택한 알림음 대신 공습경보 사이렌. 무음 설정·조용한 시간대는 그대로 존중
+export function maybeSiren(settings) {
+  if (settings.soundOn && settings.sound !== 'none' && !isQuietNow(settings)) {
+    playSiren()
   }
 }
