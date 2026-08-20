@@ -109,6 +109,11 @@ export default function Monitor() {
   // 오늘·어제 기록 — 백엔드 대시보드에서 조회, 1분(집계 전송 주기)마다 갱신
   const [serverToday, setServerToday] = useState(null)
   const [yesterday, setYesterday] = useState(null)
+  // 서버 오늘 누적은 1분 단위라 그대로 쓰면 시계가 멈춰 보인다 —
+  // 조회 시점의 누적을 앵커로 잡고, 그 위에 로컬 경과 초를 더해 매초 흐르게 한다.
+  const [serverAnchor, setServerAnchor] = useState(null) // { baseSec, atElapsed }
+  const elapsedRef = useRef(elapsedSec)
+  elapsedRef.current = elapsedSec
   useEffect(() => {
     if (!getAccessToken()) return
     const fetchDays = () => {
@@ -121,7 +126,10 @@ export default function Monitor() {
         .then((data) => {
           const t = data?.days14?.find((d) => d.d === todayKey)
           const yd = data?.days14?.find((d) => d.d === yKey)
-          if (t?.hasData) setServerToday(t)
+          if (t?.hasData) {
+            setServerToday(t)
+            if (t.totalMin != null) setServerAnchor({ baseSec: Math.round(t.totalMin * 60), atElapsed: elapsedRef.current })
+          }
           if (yd?.hasData) setYesterday(yd)
         })
         .catch(() => {})
@@ -136,7 +144,11 @@ export default function Monitor() {
   const todayPct = serverToday?.rate ?? sessionPct
   const todaySource = serverToday?.rate != null ? '오늘 전체 · 1분마다 갱신' : '이번 세션 실측'
   const todayAlertCount = serverToday?.alertCount != null ? serverToday.alertCount : alertCount
-  const todayElapsedSec = serverToday?.totalMin != null ? Math.round(serverToday.totalMin * 60) : elapsedSec
+  // 앵커(서버 누적) + 조회 이후 로컬 경과 — 재조회로 앵커가 뒤로 튀어도 시계는 뒤로 가지 않게 단조 증가 보정
+  const rawTodaySec = serverAnchor ? serverAnchor.baseSec + Math.max(0, elapsedSec - serverAnchor.atElapsed) : elapsedSec
+  const monotonicRef = useRef(0)
+  const todayElapsedSec = Math.max(rawTodaySec, monotonicRef.current)
+  monotonicRef.current = todayElapsedSec
   const rateDelta = todayPct != null && yesterday?.rate != null ? todayPct - yesterday.rate : null
   const alertDelta = todayAlertCount != null && yesterday?.alertCount != null ? todayAlertCount - yesterday.alertCount : null
 
