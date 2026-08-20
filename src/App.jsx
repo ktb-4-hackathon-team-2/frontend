@@ -73,7 +73,7 @@ function Shell() {
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar />
         <main className="min-h-0 flex-1 overflow-y-auto px-6 py-6 pb-24">
-          <div key={screen} className="mx-auto max-w-[1060px]">
+          <div key={screen} className="mx-auto max-w-[1166px]">
             <Screen />
           </div>
         </main>

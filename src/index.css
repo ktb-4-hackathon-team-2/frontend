@@ -28,6 +28,11 @@
 }
 
 @layer base {
+  /* 뷰포트는 유지하고, rem 기반 UI 컴포넌트의 글자·간격·컨트롤만 110%로 키운다. */
+  html {
+    font-size: 110%;
+  }
+
   body {
     background: var(--color-ink);
     color: var(--color-hi);

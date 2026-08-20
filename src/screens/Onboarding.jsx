@@ -102,7 +102,7 @@ function GuideMarker({ n, x, y }) {
 
 function PostureGuideDiagram() {
   return (
-    <svg viewBox="0 0 640 400" className="w-full">
+    <svg viewBox="0 0 640 400" className="w-full origin-center scale-[1.35]">
       {/* 바닥 */}
       <line x1="40" y1="368" x2="600" y2="368" stroke="rgba(255,255,255,0.16)" strokeWidth="1" />
 
