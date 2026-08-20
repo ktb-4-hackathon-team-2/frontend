@@ -36,7 +36,7 @@ function DynamicDeskDiagram({ data }) {
       </g>
       <circle cx={headX} cy="68" r="10.5" fill="#3ec98f" />
 
-      {/* 책상 + 맥북 화면 */}
+      {/* 책상 + 노트북 화면 */}
       <g stroke="rgba(255,255,255,0.25)" strokeWidth="2.5" strokeLinecap="round" fill="none">
         <path d="M230 120 L480 120" />
         <path d="M242 120 L242 189 M468 120 L468 189" />
@@ -84,7 +84,7 @@ export default function Environment() {
     <div>
       <ScreenHeader
         title="환경 가이드"
-        desc="캘리브레이션 프레임의 실측 랜드마크를 분석해 맥북 작업 환경을 진단했어요."
+        desc="캘리브레이션 프레임의 실측 랜드마크를 분석해 노트북 작업 환경을 진단했어요."
         right={
           <Btn kind="outline" size="sm" onClick={() => setCalibrated(false)}>
             <Icon name="refresh" size={13} />
