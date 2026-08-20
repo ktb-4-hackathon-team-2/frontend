@@ -509,9 +509,6 @@ export default function Onboarding() {
                 <li className="flex items-center gap-2.5">
                   <Icon name="bell" size={15} className="text-good" /> 3단계 개입 — 위젯 → 토스트 → 전체 화면
                 </li>
-                <li className="flex items-center gap-2.5">
-                  <Icon name="person" size={15} className="text-good" /> 듀얼 모니터 · 대각선 노트북 웹캠 완벽 지원
-                </li>
               </ul>
               <div className="mt-8 flex gap-3">
                 <Btn kind="primary" size="lg" onClick={() => setStep(1)}>
