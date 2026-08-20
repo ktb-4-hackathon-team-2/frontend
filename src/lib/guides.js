@@ -12,6 +12,25 @@ const FRONT_ANCHORS = {
   left_shoulder: [0.34, 0.52],
   right_shoulder: [0.66, 0.52],
 }
+
+// 좌대각: 노트북(웹캠)이 사용자 왼쪽 앞에 위치 (시선은 정면 모니터)
+const LEFT_DIAG_ANCHORS = {
+  nose: [0.46, 0.3],
+  left_ear: [0.415, 0.3],
+  right_ear: [0.535, 0.305],
+  left_shoulder: [0.33, 0.52],
+  right_shoulder: [0.62, 0.53],
+}
+
+// 우대각: 노트북(웹캠)이 사용자 오른쪽 앞에 위치 (시선은 정면 모니터)
+const RIGHT_DIAG_ANCHORS = {
+  nose: [0.54, 0.3],
+  left_ear: [0.465, 0.305],
+  right_ear: [0.585, 0.3],
+  left_shoulder: [0.38, 0.53],
+  right_shoulder: [0.67, 0.52],
+}
+
 // 스트레칭용: 팔 동작이 프레임에 들어오도록 상반신을 조금 작게/아래로
 const STRETCH_ANCHORS = {
   nose: [0.5, 0.26],
@@ -21,18 +40,42 @@ const STRETCH_ANCHORS = {
   right_shoulder: [0.635, 0.44],
 }
 
-export const VIEW_ANCHORS = { front: FRONT_ANCHORS, stretch: STRETCH_ANCHORS }
+export const VIEW_ANCHORS = {
+  front: FRONT_ANCHORS,
+  left_diagonal: LEFT_DIAG_ANCHORS,
+  right_diagonal: RIGHT_DIAG_ANCHORS,
+  stretch: STRETCH_ANCHORS,
+}
 
-// 허용 오차(정규화 거리). 원본 guides.py(0.09, 앵커 5점 전부 충족)는 체형 차이
-// (어깨 폭·귀 간격)에 과민해서, 프론트는 어깨 "중심 위치 + 거리"만 보고 완화했다.
-// ※ 서버 check_alignment와 기준이 달라졌음 — AI팀과 동기화 시 참고.
+export const CAMERA_VIEWS = [
+  {
+    id: 'front',
+    label: '정면 (모니터 상단 / 정면 노트북)',
+    desc: '웹캠이 모니터 정면 중앙에 위치한 기본 세팅',
+    badge: '기본',
+  },
+  {
+    id: 'left_diagonal',
+    label: '좌측 대각선 (노트북이 왼쪽)',
+    desc: '노트북을 왼쪽에 두고 정면 모니터를 주로 보는 듀얼 모니터 세팅',
+    badge: '듀얼 모니터 추천',
+  },
+  {
+    id: 'right_diagonal',
+    label: '우측 대각선 (노트북이 오른쪽)',
+    desc: '노트북을 오른쪽에 두고 정면 모니터를 주로 보는 듀얼 모니터 세팅',
+    badge: '듀얼 모니터 추천',
+  },
+]
+
+// 허용 오차(정규화 거리).
 export const ANCHOR_TOLERANCE = 0.12
 // 어깨 너비 비율(거리) 허용 범위 — 목표 대비 ±30%
 export const SCALE_TOLERANCE = 0.3
 
-/** 앵커 기반 상반신 실루엣 폴리곤 (머리 반원 + 어깨/몸통 사다리꼴) — guides.py _silhouette */
+/** 앵커 기반 상반신 실루엣 폴리곤 (머리 반원 + 어깨/몸통 사다리꼴) */
 export function getSilhouette(view = 'front', expand = 1.0) {
-  const a = VIEW_ANCHORS[view]
+  const a = VIEW_ANCHORS[view] || VIEW_ANCHORS.front
   const ls = a.left_shoulder
   const rs = a.right_shoulder
   const nose = a.nose
@@ -57,12 +100,9 @@ export function getSilhouette(view = 'front', expand = 1.0) {
 
 /**
  * 실시간 프레임이 가이드에 맞는지 판정 — guides.py check_alignment 포팅.
- * MediaPipe LEFT_*는 해부학 기준이라 x좌표로 정렬해 이미지 기준 좌/우로 매칭한다
- * (프레임이 미러링돼 들어와도 동일하게 동작).
- * 안내 문구는 유저 몸 기준 = 미러링된 셀피 화면 기준 방향.
  */
 export function checkAlignment(landmarks, view = 'front') {
-  const anchors = VIEW_ANCHORS[view]
+  const anchors = VIEW_ANCHORS[view] || VIEW_ANCHORS.front
   const byX = (a, b) => a.x - b.x
   const [imgLSh, imgRSh] = [landmarks[LM.LEFT_SHOULDER], landmarks[LM.RIGHT_SHOULDER]].sort(byX)
   const [imgLEar, imgREar] = [landmarks[LM.LEFT_EAR], landmarks[LM.RIGHT_EAR]].sort(byX)
@@ -99,7 +139,6 @@ export function checkAlignment(landmarks, view = 'front') {
   if (dw > SCALE_TOLERANCE) messages.push('카메라에서 조금 멀어져 주세요')
   else if (dw < -SCALE_TOLERANCE) messages.push('카메라에 조금 가까이 와 주세요')
 
-  // 앵커별 오차는 정보용으로만 계산 (판정은 중심 위치·거리 기준)
   const offsets = {}
   for (const [key, tgt] of Object.entries(anchors)) {
     const lm = lmMap[key]
@@ -124,7 +163,6 @@ export function checkAlignment(landmarks, view = 'front') {
 
 /**
  * 실루엣 폴리곤을 카메라 미리보기 위에 그린다.
- * 미리보기가 거울 모드 + object-cover이므로 같은 변환(cover 매핑 + x 반전)을 쓴다.
  */
 export function drawGuide(canvas, video, polygon, aligned) {
   if (!canvas || !video) return

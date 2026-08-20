@@ -220,7 +220,7 @@ function DayReport({ date, dayData, onBack }) {
               </ChartCard>
             </div>
 
-            {/* 🚨 경고 알림 원인 분석 카드 (우측 5컬럼) */}
+            {/* 경고 알림 원인 분석 카드 (우측 5컬럼) */}
             <div className="col-span-12 lg:col-span-5">
               <Card className="rise d4 h-full p-6 flex flex-col">
                 <div className="flex items-center justify-between">

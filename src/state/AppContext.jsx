@@ -62,8 +62,16 @@ export function AppProvider({ children }) {
     [navigate],
   )
 
+  const [cameraView, setCameraViewState] = useState(() => localStorage.getItem('bandeut_camera_view') || 'front')
+  const setCameraView = useCallback((v) => {
+    setCameraViewState(v)
+    try {
+      localStorage.setItem('bandeut_camera_view', v)
+    } catch {}
+  }, [])
+
   const [calibrated, setCalibrated] = useState(false)
-  const [calibration, setCalibration] = useState(null) // { landmarks, at }
+  const [calibration, setCalibration] = useState(null) // { landmarks, at, view }
   const [posture, setPosture] = useState('good')
   const [paused, setPaused] = useState(false)
   const [demoAlert, setDemoAlert] = useState(0) // 알림 데모용 강제 단계 (0 = 없음)
@@ -417,6 +425,7 @@ export function AppProvider({ children }) {
     postponeStretch, startStretchNow, resetSession, endMonitoring, sessionSummary,
     pendingStretchId, requestStretch, clearPendingStretch,
     tick, camera, detectionVideoRef, lastLandmarksRef, localDetection, pose,
+    cameraView, setCameraView,
     aiBaselineId, saveAiBaselineId,
   }
 

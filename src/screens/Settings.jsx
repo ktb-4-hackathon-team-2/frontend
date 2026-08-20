@@ -30,7 +30,7 @@ function Row({ label, desc, children }) {
 }
 
 export default function Settings() {
-  const { settings, updateSetting, setCalibrated, stretchLeft, setStretchSuggest, calibration } = useApp()
+  const { settings, updateSetting, setCalibrated, stretchLeft, setStretchSuggest, calibration, cameraView, setCameraView } = useApp()
   const { member, logout } = useAuth()
 
   return (
@@ -179,18 +179,48 @@ export default function Settings() {
         </div>
       </Card>
 
-      {/* 캘리브레이션 */}
+      {/* 캘리브레이션 & 카메라 배치 */}
       <Card className="rise d3 mb-4 px-6 py-2">
         <div className="py-2">
-          <MicroLabel className="pt-2">캘리브레이션</MicroLabel>
+          <MicroLabel className="pt-2">카메라 배치 & 캘리브레이션</MicroLabel>
+        </div>
+        <div className="border-b border-line py-3">
+          <div className="text-sm font-medium mb-1">카메라 배치 환경</div>
+          <div className="text-xs text-dim mb-3">작업 환경에 맞게 카메라 각도를 선택하면 맞춤 기준을 적용해요.</div>
+          <div className="grid grid-cols-3 gap-2.5">
+            {[
+              { id: 'front', label: '정면', desc: '모니터 정면 중앙' },
+              { id: 'left_diagonal', label: '좌측 대각', desc: '노트북이 왼쪽 책상' },
+              { id: 'right_diagonal', label: '우측 대각', desc: '노트북이 오른쪽 책상' },
+            ].map((v) => {
+              const active = cameraView === v.id
+              return (
+                <button
+                  key={v.id}
+                  onClick={() => setCameraView(v.id)}
+                  className={`cursor-pointer rounded-xl border p-3 text-left transition-all ${
+                    active
+                      ? 'border-good/50 bg-good/[0.07] ring-1 ring-good/40'
+                      : 'border-line hover:border-line-strong'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className={`text-xs font-semibold ${active ? 'text-good' : 'text-hi'}`}>{v.label}</span>
+                    {active && <span className="h-1.5 w-1.5 rounded-full bg-good" />}
+                  </div>
+                  <div className="mt-1 text-[10px] text-dim">{v.desc}</div>
+                </button>
+              )
+            })}
+          </div>
         </div>
         <Row
-          label="기준 자세"
-          desc={`${calibration?.at || '2026.8.19'} 촬영 · 데이터는 이 기기에만 저장돼요`}
+          label="기준 자세 재설정"
+          desc={`${calibration?.at || '2026.8.19'} 촬영 (${cameraView === 'front' ? '정면' : cameraView === 'left_diagonal' ? '좌측 대각' : '우측 대각'}) · 데이터는 기기에만 저장돼요`}
         >
           <Btn size="sm" kind="outline" onClick={() => setCalibrated(false)}>
             <Icon name="refresh" size={13} />
-            재캘리브레이션
+            다시 촬영하기
           </Btn>
         </Row>
       </Card>
