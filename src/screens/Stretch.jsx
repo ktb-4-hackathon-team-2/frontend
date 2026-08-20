@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useApp } from '../state/AppContext'
 import { useRouter } from '../state/RouterContext'
-import { STRETCHES, TARGET_LABEL, REGION_TO_ISSUES, weakestRegion } from '../data/dummy'
+import { STRETCHES, TARGET_LABEL } from '../data/dummy'
 import { CameraView } from '../components/CameraView'
 import { usePoseLandmarker } from '../hooks/usePoseLandmarker'
 import { STRETCH_RULES, drawPose } from '../lib/poseRules'
@@ -9,106 +9,234 @@ import { Btn, Card, Chip, Icon, MicroLabel, ScreenHeader } from '../components/u
 import { fmtClock } from '../lib/format'
 import { playChime } from '../lib/sound'
 
-// ── 스켈레톤 기반 목표 자세 가이드 ────────────────────────────────────
-// 거울 미리보기 기준(사용자가 보는 방향). 카메라 오버레이와 같은 계열의
-// 가는 선 + 관절 점 스타일 — 몸통은 또렷하게, 팔은 흐리게(동작 목표선).
-const GUIDES = {
-  neck_side_left: { head: [96, 36] },
-  neck_side_right: { head: [124, 36] },
-  chin_tuck: {
-    head: [110, 40],
-    marks: ['M86 33 l6 6 -6 6', 'M134 33 l-6 6 6 6'],
-  },
-  shoulder_shrug: {
-    head: [110, 32],
-    shoulders: [
-      [80, 52],
-      [140, 52],
-    ],
-    marks: ['M68 44 l6 -6 6 6', 'M140 44 l6 -6 6 6'],
-  },
-  chest_opener: {
-    armL: [
-      [80, 62],
-      [48, 60],
-      [18, 58],
-    ],
-    armR: [
-      [140, 62],
-      [172, 60],
-      [202, 58],
-    ],
-  },
-  arms_up: {
-    armL: [
-      [84, 62],
-      [76, 34],
-      [72, 12],
-    ],
-    armR: [
-      [136, 62],
-      [144, 34],
-      [148, 12],
-    ],
-  },
+// ── 모션 가이드 — 시작 자세 ↔ 목표 자세 두 키프레임을 왕복하는 루프 애니메이션.
+// 동작 데이터(뷰 각도·움직이는 부위·화살표·체크포인트)를 분리해 재사용한다.
+// 그림으로 표현할 수 없는 항목(시선·호흡 등)은 체크포인트 텍스트로 분리.
+const JADE = '#3ec98f'
+const DIM = 'rgba(62, 201, 143, 0.3)'
+const ARROW = 'rgba(255, 255, 255, 0.6)'
+
+// 동시에 지켜야 할 체크포인트 (순서 아님)
+const MOTION_META = {
+  neck_side_left: { checkpoints: ['귀가 어깨에 닿는다는 느낌으로', '반대쪽 어깨는 끌려 올라가지 않게', '통증 없는 범위까지만'] },
+  neck_side_right: { checkpoints: ['귀가 어깨에 닿는다는 느낌으로', '반대쪽 어깨는 끌려 올라가지 않게', '통증 없는 범위까지만'] },
+  chin_tuck: { checkpoints: ['시선은 정면 유지', '뒤통수를 뒤로 민다는 느낌', '이중턱이 만들어지면 잘 된 것'] },
+  shoulder_shrug: { checkpoints: ['귀에 닿을 만큼 끌어올리기', '내릴 땐 힘을 툭 풀기', '호흡은 편안하게'] },
+  chest_opener: { checkpoints: ['어깨를 뒤로 모으며 가슴 열기', '시선은 정면', '호흡은 천천히'] },
+  arms_up: { checkpoints: ['손끝을 하늘로 민다는 느낌', '몸통이 좌우로 기울지 않게', '어깨는 귀에서 멀게'] },
 }
 
-const JADE = '#3ec98f'
+// CSS 애니메이션 지정 헬퍼 — 이름과 회전/이동 기준점(viewBox 좌표)
+const ga = (name, origin) => ({ animationName: name, transformOrigin: origin })
 
-function SkeletonGuide({ id, className = '' }) {
-  const g = GUIDES[id] || {}
-  const head = g.head || [110, 34]
-  const sh = g.shoulders || [
-    [80, 62],
-    [140, 62],
-  ]
-  const shY = sh[0][1]
-  const armL = g.armL || [sh[0], [sh[0][0] - 7, shY + 24], [sh[0][0] - 10, shY + 46]]
-  const armR = g.armR || [sh[1], [sh[1][0] + 7, shY + 24], [sh[1][0] + 10, shY + 46]]
-  const poly = (pts) => pts.map((p, i) => `${i ? 'L' : 'M'}${p[0]} ${p[1]}`).join(' ')
-
-  // 목: 어깨 중앙 → 머리 원의 가장자리까지 (원 안으로 파고들지 않게)
-  const neckBase = [110, shY - 4]
-  const ndx = head[0] - neckBase[0]
-  const ndy = head[1] - neckBase[1]
-  const nlen = Math.hypot(ndx, ndy) || 1
-  const neckEnd = [head[0] - (ndx / nlen) * 11, head[1] - (ndy / nlen) * 11]
-
+// 정면 몸통 (톤 다운) — 움직이는 부위만 본색으로 강조된다
+function FrontBase({ arms = true, head = true }) {
   return (
-    <svg viewBox="0 0 220 150" className={className} fill="none" aria-hidden>
-      {/* 팔 — 흐리게 (따라 해야 할 동작 라인) */}
-      <g stroke={JADE} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.35">
-        <path d={poly(armL)} />
-        <path d={poly(armR)} />
+    <g stroke={DIM} strokeLinecap="round" strokeLinejoin="round" fill="none">
+      <path d="M84 62 L136 62" strokeWidth="22" />
+      <path d="M110 64 L110 100" strokeWidth="38" />
+      {arms && (
+        <>
+          <path d="M80 62 L73 86 L70 108" strokeWidth="11" />
+          <path d="M140 62 L147 86 L150 108" strokeWidth="11" />
+        </>
+      )}
+      {head && (
+        <>
+          <path d="M110 58 L110 49" strokeWidth="12" />
+          <circle cx="110" cy="34" r="15" fill={DIM} stroke="none" />
+        </>
+      )}
+    </g>
+  )
+}
+
+// 측면 몸통 (톤 다운) — 깊이 방향 동작(턱 당기기·가슴 열기)용
+function SideBase({ arm = true, head = true }) {
+  return (
+    <g stroke={DIM} strokeLinecap="round" strokeLinejoin="round" fill="none">
+      <path d="M114 64 L106 102" strokeWidth="34" />
+      {arm && <path d="M112 66 L122 92 L128 112" strokeWidth="11" />}
+      {head && (
+        <>
+          <path d="M113 60 L120 47" strokeWidth="12" />
+          <circle cx="123" cy="36" r="15" fill={DIM} stroke="none" />
+        </>
+      )}
+    </g>
+  )
+}
+
+function MotionGuide({ id, view = 'front', className = '' }) {
+  const svgProps = { viewBox: '0 0 220 150', className, fill: 'none', 'aria-hidden': true }
+  const front = view === 'front'
+
+  if (id === 'neck_side_left' || id === 'neck_side_right') {
+    const left = id === 'neck_side_left'
+    if (front) {
+      // 정면 — 판정(어깨 대비 머리 기울기)과 동일한 모습
+      return (
+        <svg {...svgProps}>
+          <FrontBase head={false} />
+          <g className="ga" style={ga(left ? 'ga-tilt-l' : 'ga-tilt-r', '110px 60px')} stroke={JADE} strokeLinecap="round" fill="none">
+            <path d="M110 58 L110 47" strokeWidth="12" />
+            <circle cx="110" cy="34" r="15" fill={JADE} stroke="none" />
+          </g>
+          {left ? (
+            <>
+              <path d="M128 16 Q110 4 96 11" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" />
+              <path d="M100 5 L89 13 L100 18 Z" fill={ARROW} />
+            </>
+          ) : (
+            <>
+              <path d="M92 16 Q110 4 124 11" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" />
+              <path d="M120 5 L131 13 L120 18 Z" fill={ARROW} />
+            </>
+          )}
+        </svg>
+      )
+    }
+    // 측면 — 옆에서 보면 머리가 살짝 낮아지는 정도로 보인다
+    return (
+      <svg {...svgProps}>
+        <SideBase head={false} />
+        <g className="ga" style={ga('ga-tilt-side', '118px 52px')} stroke={JADE} strokeLinecap="round" fill="none">
+          <path d="M113 60 L120 47" strokeWidth="12" />
+          <circle cx="123" cy="36" r="15" fill={JADE} stroke="none" />
+        </g>
+        <path d="M152 20 Q140 10 128 14" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" />
+        <path d="M132 8 L122 16 L133 20 Z" fill={ARROW} />
+      </svg>
+    )
+  }
+
+  if (id === 'chin_tuck') {
+    if (front) {
+      // 정면 — 판정(코가 귀선 대비 내려옴)과 동일한 모습: 머리가 살짝 내려온다
+      return (
+        <svg {...svgProps}>
+          <FrontBase head={false} />
+          <g className="ga" style={ga('ga-tuck-front', '110px 47px')} stroke={JADE} strokeLinecap="round" fill="none">
+            <path d="M110 58 L110 49" strokeWidth="12" />
+            <circle cx="110" cy="34" r="15" fill={JADE} stroke="none" />
+          </g>
+          <path d="M84 28 l7 6 -7 6" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M136 28 l-7 6 7 6" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )
+    }
+    // 측면 — 머리가 뒤로 미끄러지는 실제 동작
+    return (
+      <svg {...svgProps}>
+        <SideBase head={false} />
+        <g className="ga" style={ga('ga-tuck', '120px 45px')} stroke={JADE} strokeLinecap="round" fill="none">
+          <path d="M113 60 L120 47" strokeWidth="12" />
+          <circle cx="123" cy="36" r="15" fill={JADE} stroke="none" />
+        </g>
+        <path d="M168 30 L150 30" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" />
+        <path d="M150 24 L140 30 L150 36 Z" fill={ARROW} />
+      </svg>
+    )
+  }
+
+  if (id === 'shoulder_shrug') {
+    if (front) {
+      return (
+        <svg {...svgProps}>
+          <g stroke={DIM} strokeLinecap="round" fill="none">
+            <path d="M110 64 L110 100" strokeWidth="38" />
+            <path d="M110 58 L110 49" strokeWidth="12" />
+            <circle cx="110" cy="34" r="15" fill={DIM} stroke="none" />
+          </g>
+          <g className="ga" style={ga('ga-shrug', '110px 62px')} stroke={JADE} strokeLinecap="round" strokeLinejoin="round" fill="none">
+            <path d="M84 62 L136 62" strokeWidth="22" />
+            <path d="M80 62 L73 86 L70 108" strokeWidth="11" />
+            <path d="M140 62 L147 86 L150 108" strokeWidth="11" />
+          </g>
+          <path d="M56 72 L56 54" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" />
+          <path d="M50 56 L56 45 L62 56 Z" fill={ARROW} />
+          <path d="M164 72 L164 54" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" />
+          <path d="M158 56 L164 45 L170 56 Z" fill={ARROW} />
+        </svg>
+      )
+    }
+    // 측면 — 어깨 블록과 팔이 함께 올라간다
+    return (
+      <svg {...svgProps}>
+        <SideBase arm={false} />
+        <g className="ga" style={ga('ga-shrug', '112px 64px')} strokeLinecap="round" strokeLinejoin="round" fill="none">
+          <circle cx="112" cy="64" r="11" fill={JADE} />
+          <path d="M112 66 L122 92 L128 112" stroke={JADE} strokeWidth="11" />
+        </g>
+        <path d="M152 70 L152 52" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" />
+        <path d="M146 54 L152 43 L158 54 Z" fill={ARROW} />
+      </svg>
+    )
+  }
+
+  if (id === 'chest_opener') {
+    if (front) {
+      // 정면 — 판정(손목 간격 어깨너비 1.7배·어깨 높이)과 동일한 모습: 양팔을 수평으로 벌린다
+      return (
+        <svg {...svgProps}>
+          <FrontBase arms={false} />
+          <g className="ga" style={ga('ga-spread-l', '80px 62px')} stroke={JADE} strokeLinecap="round" strokeLinejoin="round" fill="none">
+            <path d="M80 62 L52 60 L24 58" strokeWidth="11" />
+          </g>
+          <g className="ga" style={ga('ga-spread-r', '140px 62px')} stroke={JADE} strokeLinecap="round" strokeLinejoin="round" fill="none">
+            <path d="M140 62 L168 60 L196 58" strokeWidth="11" />
+          </g>
+          <path d="M36 42 L22 42" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" />
+          <path d="M22 36 L12 42 L22 48 Z" fill={ARROW} />
+          <path d="M184 42 L198 42" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" />
+          <path d="M198 36 L208 42 L198 48 Z" fill={ARROW} />
+        </svg>
+      )
+    }
+    // 측면 — 팔이 앞에서 뒤로 넘어가는 깊이 방향 동작
+    return (
+      <svg {...svgProps}>
+        <SideBase arm={false} />
+        <g className="ga" style={ga('ga-swing-back', '112px 66px')} stroke={JADE} strokeLinecap="round" strokeLinejoin="round" fill="none">
+          <path d="M112 66 L140 70 L166 72" strokeWidth="11" />
+        </g>
+        <path d="M152 42 A46 46 0 0 1 76 54" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" fill="none" />
+        <path d="M82 46 L70 56 L84 60 Z" fill={ARROW} />
+      </svg>
+    )
+  }
+
+  // arms_up
+  if (front) {
+    return (
+      <svg {...svgProps}>
+        <FrontBase arms={false} />
+        <g className="ga" style={ga('ga-raise-l', '80px 62px')} stroke={JADE} strokeLinecap="round" strokeLinejoin="round" fill="none">
+          <path d="M80 62 L74 36 L70 14" strokeWidth="11" />
+        </g>
+        <g className="ga" style={ga('ga-raise-r', '140px 62px')} stroke={JADE} strokeLinecap="round" strokeLinejoin="round" fill="none">
+          <path d="M140 62 L146 36 L150 14" strokeWidth="11" />
+        </g>
+        <path d="M52 32 L52 14" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" />
+        <path d="M46 16 L52 5 L58 16 Z" fill={ARROW} />
+        <path d="M168 32 L168 14" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" />
+        <path d="M162 16 L168 5 L174 16 Z" fill={ARROW} />
+      </svg>
+    )
+  }
+  // 측면 — 팔이 몸 옆을 지나 귀 옆까지 올라간다
+  return (
+    <svg {...svgProps}>
+      <SideBase arm={false} />
+      <g className="ga" style={ga('ga-raise-side', '112px 66px')} stroke={JADE} strokeLinecap="round" strokeLinejoin="round" fill="none">
+        <path d="M112 66 L116 40 L118 16" strokeWidth="11" />
       </g>
-      {[armL[1], armL[2], armR[1], armR[2]].map((p, i) => (
-        <circle key={`aj${i}`} cx={p[0]} cy={p[1]} r="3" fill={JADE} opacity="0.35" />
-      ))}
-
-      {/* 몸통 — 또렷하게 */}
-      <g stroke={JADE} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.9">
-        <circle cx={head[0]} cy={head[1]} r="11" fill="rgba(62, 201, 143, 0.08)" />
-        <path d={`M${neckBase[0]} ${neckBase[1]} L${neckEnd[0].toFixed(1)} ${neckEnd[1].toFixed(1)}`} />
-        <path d={`M${sh[0][0]} ${shY} Q110 ${shY - 11} ${sh[1][0]} ${sh[1][1]}`} />
-        <path d={`M110 ${shY - 3} L110 108`} />
-        <path d="M92 108 Q110 115 128 108" opacity="0.6" />
-      </g>
-
-      {/* 관절 점 — 어깨는 또렷, 골반은 옅게 */}
-      {sh.map((p, i) => (
-        <circle key={`sj${i}`} cx={p[0]} cy={p[1]} r="3" fill={JADE} opacity="0.9" />
-      ))}
-      <circle cx="92" cy="108" r="2.5" fill={JADE} opacity="0.45" />
-      <circle cx="128" cy="108" r="2.5" fill={JADE} opacity="0.45" />
-
-      {(g.marks || []).map((d) => (
-        <path key={d} d={d} stroke="rgba(255, 255, 255, 0.35)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      ))}
+      <path d="M142 30 L142 12" stroke={ARROW} strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M136 14 L142 3 L148 14 Z" fill={ARROW} />
     </svg>
   )
 }
 
-// ── 진행 링 ──────────────────────────────────────────────────────────
 function TimerRing({ remaining, total, label }) {
   const R = 56
   const C = 2 * Math.PI * R
@@ -257,25 +385,42 @@ function ActiveSession({ stretch, onExit }) {
           </div>
         </div>
 
-        {/* 스켈레톤 기반 자세 가이드 */}
+        {/* 모션 가이드 — 시작↔목표 왕복 애니메이션 + 동시 체크포인트 */}
         <div className="rounded-xl border border-line bg-raised/60 p-4">
           <div className="flex items-center justify-between">
-            <MicroLabel>스켈레톤 자세 가이드</MicroLabel>
+            <MicroLabel>모션 가이드</MicroLabel>
             <span className="font-mono text-[11px] text-dim">{stretch.hold}초 유지</span>
           </div>
-          <SkeletonGuide id={stretch.id} className="mx-auto h-44" />
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="rounded-lg border border-line bg-surface/60 p-2">
+              <div className="flex items-center gap-1.5 px-1 font-mono text-[9px] uppercase tracking-[0.15em] text-dim">
+                <Icon name="camera" size={10} />
+                정면 · 카메라 판정 기준
+              </div>
+              <MotionGuide id={stretch.id} view="front" className="h-32 w-full" />
+            </div>
+            <div className="rounded-lg border border-line bg-surface/60 p-2">
+              <div className="flex items-center gap-1.5 px-1 font-mono text-[9px] uppercase tracking-[0.15em] text-dim">
+                <Icon name="person" size={10} />
+                측면 · 동작 이해
+              </div>
+              <MotionGuide id={stretch.id} view="side" className="h-32 w-full" />
+            </div>
+          </div>
+          <div className="mt-2 border-t border-line pt-3">
+            <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-dim">
+              체크포인트 — 동시에 지켜주세요
+            </div>
+            <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5">
+              {(MOTION_META[stretch.id]?.checkpoints ?? []).map((c) => (
+                <li key={c} className="flex items-start gap-2 text-[12px] leading-snug text-mid">
+                  <Icon name="check" size={13} className="mt-0.5 shrink-0 text-good/70" />
+                  {c}
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
-
-        <ol className="mt-5 flex flex-col gap-2.5">
-          {stretch.steps.map((s, i) => (
-            <li key={s} className="flex items-start gap-3 text-sm text-mid">
-              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/[0.06] font-mono text-[10px] text-hi">
-                {i + 1}
-              </span>
-              {s}
-            </li>
-          ))}
-        </ol>
 
         <div className="mt-6 flex items-center gap-6 border-t border-line pt-6">
           <TimerRing
@@ -380,7 +525,7 @@ function ActiveSession({ stretch, onExit }) {
 }
 
 export default function Stretch() {
-  const { posture, stretchLeft, startStretchNow, localDetection } = useApp()
+  const { stretchLeft, startStretchNow, localDetection } = useApp()
   const { path, navigate } = useRouter()
 
   // 동작별 URL 매핑 — /stretch/<id> 면 해당 세션, /stretch 면 목록
@@ -394,11 +539,23 @@ export default function Stretch() {
 
   // 온디바이스 판정에서 방금 감지된 issue code로, 없으면 취약 부위 매핑으로 추천.
   // AI 서버 recommend와 같은 방식: 겹치는 문제 개수가 많은 순으로 정렬.
-  const liveIssues = localDetection.issues?.length ? localDetection.issues : null
-  const issueSet = liveIssues ?? REGION_TO_ISSUES[weakestRegion(posture)] ?? []
-  const matchCount = (s) => s.targets.filter((t) => issueSet.includes(t)).length
-  const isRecommended = (s) => matchCount(s) > 0
-  const sorted = [...STRETCHES].sort((a, b) => matchCount(b) - matchCount(a))
+  // 추천은 온디바이스 판정이 실제로 감지한 문제가 있을 때만 — 폴백 없음.
+  // 점수 = 매칭된 문제의 심각도 가중치 합 (심각한 순으로 n, n-1, … 1점) → 상위 2개만 추천.
+  const issueSet = localDetection.issues?.length ? localDetection.issues : []
+  const weightOf = (code) => {
+    const i = issueSet.indexOf(code)
+    return i === -1 ? 0 : issueSet.length - i
+  }
+  const scoreOf = (s) => s.targets.reduce((sum, t) => sum + weightOf(t), 0)
+  const recommendedIds = STRETCHES.map((s) => ({ id: s.id, score: scoreOf(s) }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 2)
+    .map((x) => x.id)
+  const isRecommended = (s) => recommendedIds.includes(s.id)
+  const sorted = [...STRETCHES].sort(
+    (a, b) => Number(isRecommended(b)) - Number(isRecommended(a)) || scoreOf(b) - scoreOf(a),
+  )
 
   if (active) return <ActiveSession key={active.id} stretch={active} onExit={() => navigate('/stretch')} />
 
@@ -406,7 +563,7 @@ export default function Stretch() {
     <div>
       <ScreenHeader
         title="스트레칭"
-        desc={`앉아서 하는 상반신 동작 6종 · ${liveIssues ? '방금 감지된 자세 문제' : '현재 취약 부위'} 기준으로 추천해요.`}
+        desc={`앉아서 하는 상반신 동작 6종${issueSet.length ? ' · 감지된 문제에 가장 필요한 2가지를 추천했어요' : ' · 자세 문제가 감지되면 맞는 동작을 추천해요'}`}
         right={
           <Card className="flex items-center gap-3 px-4 py-2.5">
             <Icon name="clock" size={15} className="text-dim" />

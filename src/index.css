@@ -111,6 +111,26 @@
 }
 .breathe { animation: breathe 2.4s ease-in-out infinite; }
 
+/* 스트레칭 모션 가이드 — 시작↔목표 왕복, 목표 자세(40~60%)에서 잠깐 유지 */
+@keyframes ga-tilt-l { 0%, 100% { transform: rotate(0deg); } 40%, 60% { transform: rotate(-24deg); } }
+@keyframes ga-tilt-r { 0%, 100% { transform: rotate(0deg); } 40%, 60% { transform: rotate(24deg); } }
+@keyframes ga-tuck { 0%, 100% { transform: translate(0, 0); } 40%, 60% { transform: translate(-11px, 2px); } }
+@keyframes ga-shrug { 0%, 100% { transform: translateY(0); } 40%, 60% { transform: translateY(-11px); } }
+@keyframes ga-swing-back { 0%, 100% { transform: rotate(0deg); } 40%, 60% { transform: rotate(138deg); } }
+@keyframes ga-raise-l { 0%, 100% { transform: rotate(150deg); } 40%, 60% { transform: rotate(0deg); } }
+@keyframes ga-raise-r { 0%, 100% { transform: rotate(-150deg); } 40%, 60% { transform: rotate(0deg); } }
+@keyframes ga-tuck-front { 0%, 100% { transform: translateY(0); } 40%, 60% { transform: translateY(5px); } }
+@keyframes ga-tilt-side { 0%, 100% { transform: translate(0, 0) rotate(0deg); } 40%, 60% { transform: translate(0, 4px) rotate(-8deg); } }
+@keyframes ga-spread-l { 0%, 100% { transform: rotate(-75deg); } 40%, 60% { transform: rotate(0deg); } }
+@keyframes ga-spread-r { 0%, 100% { transform: rotate(75deg); } 40%, 60% { transform: rotate(0deg); } }
+@keyframes ga-raise-side { 0%, 100% { transform: rotate(140deg); } 40%, 60% { transform: rotate(0deg); } }
+.ga {
+  animation-duration: 3s;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  transform-box: view-box;
+}
+
 @keyframes shake {
   10%, 90% { transform: translateX(-1px); }
   20%, 80% { transform: translateX(2px); }
