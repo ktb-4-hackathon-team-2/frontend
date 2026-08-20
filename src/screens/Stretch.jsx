@@ -330,7 +330,7 @@ function TimerRing({ remaining, total, label }) {
 const TICK_MS = 100
 
 function ActiveSession({ stretch, onExit }) {
-  const { camera } = useApp()
+  const { camera, markStretchDone } = useApp()
   const rule = STRETCH_RULES[stretch.id]
   const pose = usePoseLandmarker(true)
   const camOn = camera.status === 'active'
@@ -373,7 +373,8 @@ function ActiveSession({ stretch, onExit }) {
   const complete = useCallback(() => {
     playChime('wood')
     setDone(true)
-  }, [])
+    markStretchDone() // 세션 스트레칭 수행 횟수 — 종료 시 리포트 통계로 전송
+  }, [markStretchDone])
 
   const restart = () => {
     heldRef.current = 0

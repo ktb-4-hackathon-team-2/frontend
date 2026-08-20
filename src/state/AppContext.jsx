@@ -443,8 +443,27 @@ export function AppProvider({ children }) {
 
   // 모니터링 종료 — 잔여 집계를 즉시 전송하고 카메라를 끈 뒤 세션 요약 화면으로.
   // 유지율·알림 횟수는 즉시 보여주고, AI 코멘트는 추후 리포트 분석이 채운다.
+  // 세션 중 스트레칭 제안/수행 횟수 — 종료 시 backend로 보내 AI 리포트 분석의 입력이 된다.
+  // (이걸 안 보내면 리포트의 스트레칭 수치가 항상 0/0으로 잡힌다)
+  const stretchStatsRef = useRef({ suggested: 0, done: 0 })
+  useEffect(() => {
+    if (stretchSuggest) stretchStatsRef.current.suggested += 1
+  }, [stretchSuggest])
+  const markStretchDone = useCallback(() => {
+    stretchStatsRef.current.done += 1
+  }, [])
+
   const endMonitoring = useCallback(() => {
     flushWindow(false)
+    // 스트레칭 통계를 실어 종료를 알린다 — backend가 당일 집계 + AI 분석까지 수행
+    const st = stretchStatsRef.current
+    const token = getAccessToken()
+    if (token) {
+      api
+        .endMonitoringSession({ stretchSuggested: st.suggested, stretchDone: st.done }, token)
+        .catch((e) => console.warn('모니터링 종료 집계 전송 실패:', e))
+    }
+    stretchStatsRef.current = { suggested: 0, done: 0 }
     const agg = sessionAggRef.current
     setSessionSummary({
       endedAt: Date.now(),
@@ -523,6 +542,7 @@ export function AppProvider({ children }) {
     setStretchLeft(settings.stretchMin * 60)
     setStretchSuggest(false)
     sessionAggRef.current = { good: 0, total: 0 }
+    stretchStatsRef.current = { suggested: 0, done: 0 }
   }, [settings.stretchMin])
 
   const updateSetting = useCallback((key, value) => {
@@ -564,7 +584,7 @@ export function AppProvider({ children }) {
     settings, setSettings, updateSetting,
     alertCount, elapsedSec, stretchLeft, stretchSuggest, setStretchSuggest,
     postponeStretch, startStretchNow, adjustStretch, resetSession, endMonitoring, sessionSummary,
-    requestStretch,
+    requestStretch, markStretchDone,
     tick, camera, detectionVideoRef, lastLandmarksRef, localDetection, pose,
     pipWindow, openFloatingWidget, closeFloatingWidget,
     cameraView, setCameraView,
