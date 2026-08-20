@@ -34,10 +34,10 @@ export function AlertLayer() {
       {/* ── 2단계: 작은 토스트 ── */}
       {toastVisible && (
         <div className="toast-in fixed right-5 top-16 z-50 w-[340px]">
-          <div className="overflow-hidden rounded-2xl border border-warn2/40 bg-raised shadow-2xl">
-            <div className="h-0.5 w-full bg-warn2" />
+          <div className="alert-toast-warn2 overflow-hidden rounded-2xl border border-warn2/40 bg-raised shadow-2xl">
+            <div className="alert-tone-bar h-0.5 w-full bg-warn2" />
             <div className="flex gap-3 p-4">
-              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warn2/15 text-warn2">
+              <span className="alert-tone-icon mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warn2/15 text-warn2">
                 <Icon name="alert" size={16} />
               </span>
               <div className="min-w-0 flex-1">
@@ -100,10 +100,10 @@ export function AlertLayer() {
       {/* ── 스트레칭 제안 (경고와 구분되는 차분한 톤) ── */}
       {stretchSuggest && !overlayVisible && (
         <div className="toast-in fixed bottom-24 right-5 z-40 w-[320px]">
-          <div className="overflow-hidden rounded-2xl border border-good/30 bg-raised shadow-2xl">
-            <div className="h-0.5 w-full bg-good" />
+          <div className="alert-toast-good overflow-hidden rounded-2xl border border-good/30 bg-raised shadow-2xl">
+            <div className="alert-tone-bar h-0.5 w-full bg-good" />
             <div className="flex gap-3 p-4">
-              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-good/15 text-good">
+              <span className="alert-tone-icon mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-good/15 text-good">
                 <Icon name="clock" size={16} />
               </span>
               <div className="flex-1">
@@ -137,8 +137,8 @@ function FullOverlay({ onResolve, rec, onStretch }) {
   }, [])
 
   return (
-    <div className="overlay-in fixed inset-0 z-[60] flex items-center justify-center">
-      <div className="absolute inset-0 bg-ink/85 backdrop-blur-xl" />
+    <div className="alert-overlay overlay-in fixed inset-0 z-[60] flex items-center justify-center">
+      <div className="alert-overlay-scrim absolute inset-0 backdrop-blur-xl" />
       <div
         className="absolute inset-0"
         style={{ background: 'radial-gradient(900px 600px at 50% 40%, rgb(224 57 62 / 0.16), transparent 65%)' }}

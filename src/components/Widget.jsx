@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useApp } from '../state/AppContext'
 import { Btn, Card, Chip, Icon, MicroLabel, PostureFigure, TONE } from './ui'
 import { fmtDur } from '../lib/format'
+
+const STAGE_LABEL = { good: '양호', warn1: '주의', warn2: '경고', warn3: '심각' }
 
 // 상시 미니 위젯 — 최종적으로는 OS 트레이 아이콘이 될 자리.
 // 평상시엔 이게 앱의 유일한 존재감이어야 하므로, 조용하게.
@@ -18,19 +20,21 @@ export function Widget() {
       : meta.score
   const [open, setOpen] = useState(false)
 
-  // 1단계 데모: 위젯만 조용히 경고색으로
-  const displayState = demoAlert === 1 ? 'warn1' : posture
-  const displayLevel = demoAlert === 1 ? 1 : warnLevel
-  const tone = paused ? TONE.neutral : TONE[displayState === 'good' ? 'good' : displayState]
+  // 데모와 실제 감지 모두 같은 알림 단계 색상을 사용한다.
+  const displayState = demoAlert > 0 ? `warn${demoAlert}` : posture
+  const displayLevel = demoAlert > 0 ? demoAlert : warnLevel
+  const displayTone = displayState === 'good' ? 'good' : displayState
+  const tone = paused ? TONE.neutral : TONE[displayTone]
+  const displayLabel = paused ? '일시정지' : STAGE_LABEL[displayTone]
   const alerting = !paused && displayLevel >= 1
 
   return (
     <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-3">
       {open && (
-        <Card className="toast-in w-72 border-line-strong bg-surface/95 p-4 shadow-2xl backdrop-blur">
+        <Card className="floating-widget-panel toast-in w-72 border-line-strong bg-surface/95 p-4 shadow-2xl backdrop-blur">
           <div className="mb-3 flex items-center justify-between">
             <MicroLabel>Posture Guard</MicroLabel>
-            <Chip tone={paused ? 'neutral' : meta.tone}>{paused ? '일시정지' : meta.label}</Chip>
+            <Chip tone={paused ? 'neutral' : displayTone}>{displayLabel}</Chip>
           </div>
           <div className="mb-3 flex items-center gap-3">
             <PostureFigure state={displayState} className={`h-12 w-12 ${tone.text}`} />
@@ -73,12 +77,12 @@ export function Widget() {
       <button
         onClick={() => setOpen((o) => !o)}
         title="반듯 위젯"
-        className={`relative flex h-14 w-14 cursor-pointer items-center justify-center rounded-2xl border bg-surface/90 shadow-lg backdrop-blur transition-all duration-300 hover:scale-105 ${
-          alerting ? `${tone.border} ${tone.soft}` : 'border-line-strong'
+        className={`floating-widget relative flex h-14 w-14 cursor-pointer items-center justify-center rounded-2xl border bg-surface/90 shadow-lg backdrop-blur transition-all duration-300 hover:scale-105 ${
+          alerting ? `floating-widget-alert floating-widget-alert-${displayTone}` : 'border-line-strong'
         }`}
       >
         {alerting && displayLevel >= 2 && (
-          <span className={`absolute inset-0 rounded-2xl border-2 ${tone.border} ring-ping`} />
+          <span className="floating-widget-ring absolute inset-0 rounded-2xl border-2 ring-ping" />
         )}
         <PostureFigure
           state={paused ? 'good' : displayState}
@@ -90,7 +94,7 @@ export function Widget() {
             <span
               key={l}
               className={`h-[3px] w-[7px] rounded-full transition-colors duration-300 ${
-                !paused && displayLevel >= l ? tone.bg : 'bg-white/12'
+                !paused && displayLevel >= l ? 'floating-widget-dot-active' : 'floating-widget-dot-idle'
               }`}
             />
           ))}
@@ -108,30 +112,47 @@ export function Widget() {
 // 플로팅 위젯 (Document PiP) — 다른 앱 위에 떠 있는 창에 포털로 렌더.
 // 메인 앱과 같은 React 트리라 자세 상태가 실시간으로 반영된다.
 export function FloatingWidgetPortal() {
-  const { pipWindow, posture, meta, paused, setPaused, warnLevel, localDetection } = useApp()
+  const { pipWindow, posture, meta, paused, setPaused, warnLevel, demoAlert, localDetection, theme } = useApp()
+
+  useEffect(() => {
+    if (!pipWindow) return
+    pipWindow.document.documentElement.dataset.theme = theme
+    pipWindow.document.body.style.background = getComputedStyle(document.documentElement).getPropertyValue('--color-ink').trim()
+  }, [pipWindow, theme])
+
   if (!pipWindow) return null
 
-  const tone = paused ? TONE.neutral : TONE[meta.tone]
+  const displayState = demoAlert > 0 ? `warn${demoAlert}` : posture
+  const displayLevel = demoAlert > 0 ? demoAlert : warnLevel
+  const displayTone = displayState === 'good' ? 'good' : displayState
+  const tone = paused ? TONE.neutral : TONE[displayTone]
+  const displayLabel = paused ? '일시정지' : STAGE_LABEL[displayTone]
   const score =
     localDetection.status === 'tracking' && localDetection.displayScore != null
       ? localDetection.displayScore
       : meta.score
 
   return createPortal(
-    <div className={`relative flex h-screen w-screen items-center gap-3 border-t-2 bg-ink px-4 ${tone.border}`}>
+    <div
+      className={`floating-widget floating-widget-pip relative flex h-screen w-screen items-center gap-3 border-t-2 bg-ink px-4 ${
+        !paused ? `floating-widget-alert floating-widget-alert-${displayTone}` : ''
+      }`}
+    >
       {/* 브랜드 라벨 — PiP 타이틀바의 도메인 표기는 브라우저 보안 UI라 못 바꾸므로 콘텐츠 안에 표기 */}
       <span className="absolute right-3 top-2 text-[11px] font-bold tracking-tight text-mid">반듯</span>
-      <PostureFigure state={paused ? 'good' : posture} className={`h-16 w-16 shrink-0 ${tone.text}`} stroke={5} />
+      <PostureFigure state={paused ? 'good' : displayState} className={`h-16 w-16 shrink-0 ${tone.text}`} stroke={5} />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <span className="font-mono text-3xl font-semibold leading-none text-hi">{paused ? '--' : score}</span>
-          <span className={`text-sm font-medium ${tone.text}`}>{paused ? '일시정지' : meta.label}</span>
+          <span className={`text-sm font-medium ${tone.text}`}>{displayLabel}</span>
         </div>
         <div className="mt-1.5 flex gap-0.5">
           {[1, 2, 3].map((l) => (
             <span
               key={l}
-              className={`h-[3px] w-4 rounded-full ${!paused && warnLevel >= l ? tone.bg : 'bg-white/15'}`}
+              className={`h-[3px] w-4 rounded-full ${
+                !paused && displayLevel >= l ? 'floating-widget-dot-active' : 'floating-widget-dot-idle'
+              }`}
             />
           ))}
         </div>

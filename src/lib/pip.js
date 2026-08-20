@@ -28,8 +28,9 @@ export function copyStylesTo(pipWindow) {
 export async function openPipWindow({ width = 340, height = 210 } = {}) {
   const pipWindow = await window.documentPictureInPicture.requestWindow({ width, height })
   copyStylesTo(pipWindow)
+  pipWindow.document.documentElement.dataset.theme = document.documentElement.dataset.theme || 'dark'
   pipWindow.document.title = '반듯 위젯'
   pipWindow.document.body.style.margin = '0'
-  pipWindow.document.body.style.background = '#0b0d0e'
+  pipWindow.document.body.style.background = getComputedStyle(document.documentElement).getPropertyValue('--color-ink').trim()
   return pipWindow
 }

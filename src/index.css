@@ -22,9 +22,69 @@
   --color-warn2: #ef8b4e;
   --color-warn3: #e0393e;
 
+  /* 라이트모드에서 상태 텍스트에만 사용하는 대비 보정 색상 */
+  --color-good-ink: #3ec98f;
+  --color-warn1-ink: #e6b345;
+  --color-warn2-ink: #ef8b4e;
+  --color-warn3-ink: #e0393e;
+
   /* 차트 계열 — validate_palette.js 통과 조합 (dark surface #121517) */
   --color-viz1: #2aa274;
   --color-viz2: #5e87c9;
+}
+
+:root {
+  color-scheme: dark;
+  --app-glow: rgb(62 201 143 / 0.05);
+  --app-glow-secondary: rgb(94 135 201 / 0.045);
+  --chart-viz1: #2aa274;
+  --chart-viz2: #5e87c9;
+  --chart-viz1-rgb: 42 162 116;
+  --chart-grid: rgb(255 255 255 / 0.06);
+  --chart-base: rgb(255 255 255 / 0.16);
+  --chart-axis-text: #6b746e;
+  --chart-ink-hi: #e9edeb;
+  --chart-surface: #121517;
+  --chart-viz1-soft-fill: rgb(42 162 116 / 0.12);
+  --chart-viz1-soft-stroke: rgb(42 162 116 / 0.4);
+  --chart-spark: rgb(255 255 255 / 0.22);
+  --alert-warn1: #e6b345;
+  --alert-warn2: #ef8b4e;
+  --alert-warn3: #e0393e;
+  --alert-good: #3ec98f;
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+  --color-ink: #f3fbf8;
+  --color-surface: #ffffff;
+  --color-raised: #fbfdfc;
+  --color-line: rgb(11 13 14 / 0.12);
+  --color-line-strong: rgb(11 13 14 / 0.24);
+  --color-hi: #0b0d0e;
+  --color-mid: #29443b;
+  --color-dim: #5e756b;
+  --color-good-ink: #237453;
+  --color-warn1-ink: #7c5a00;
+  --color-warn2-ink: #98440f;
+  --color-warn3-ink: #b32f2f;
+  --app-glow: rgb(62 201 143 / 0.10);
+  --app-glow-secondary: rgb(94 135 201 / 0.08);
+  --chart-viz1: #16734f;
+  --chart-viz2: #416fae;
+  --chart-viz1-rgb: 22 115 79;
+  --chart-grid: rgb(11 13 14 / 0.14);
+  --chart-base: rgb(11 13 14 / 0.28);
+  --chart-axis-text: #52675e;
+  --chart-ink-hi: #0b0d0e;
+  --chart-surface: #ffffff;
+  --chart-viz1-soft-fill: rgb(22 115 79 / 0.13);
+  --chart-viz1-soft-stroke: rgb(22 115 79 / 0.48);
+  --chart-spark: rgb(11 13 14 / 0.28);
+  --alert-warn1: #8a6200;
+  --alert-warn2: #a54b15;
+  --alert-warn3: #b52f38;
+  --alert-good: #16734f;
 }
 
 @layer base {
@@ -48,13 +108,189 @@
   *::-webkit-scrollbar-track { background: transparent; }
   input[type="time"] { color-scheme: dark; }
   select { color-scheme: dark; }
+  [data-theme='light'] input[type="time"],
+  [data-theme='light'] select { color-scheme: light; }
+}
+
+/* 라이트모드에서 알림 텍스트만 배경 위에서 충분히 읽히도록 보정 */
+.text-good { color: var(--color-good-ink); }
+.text-warn1 { color: var(--color-warn1-ink); }
+.text-warn2 { color: var(--color-warn2-ink); }
+.text-warn3 { color: var(--color-warn3-ink); }
+
+/* 라이트모드 알림 — 흰 카드 위에서도 단계가 선명하게 보이도록 보정 */
+[data-theme='light'] .alert-toast-warn2 {
+  border-color: rgb(165 75 21 / 0.52);
+}
+[data-theme='light'] .alert-toast-warn2 .alert-tone-bar {
+  background-color: var(--alert-warn2);
+}
+[data-theme='light'] .alert-toast-warn2 .alert-tone-icon {
+  background-color: rgb(165 75 21 / 0.14);
+  color: var(--alert-warn2);
+}
+[data-theme='light'] .alert-toast-good {
+  border-color: rgb(22 115 79 / 0.42);
+}
+[data-theme='light'] .alert-toast-good .alert-tone-bar {
+  background-color: var(--alert-good);
+}
+[data-theme='light'] .alert-toast-good .alert-tone-icon {
+  background-color: rgb(22 115 79 / 0.13);
+  color: var(--alert-good);
+}
+
+/* 전체 화면 경고는 테마와 관계없이 어두운 무대 위에 표시 */
+.alert-overlay {
+  --color-ink: #0b0d0e;
+  --color-hi: #e9edeb;
+  --color-mid: #a3ada7;
+  --color-dim: #5c665f;
+  --color-warn3-ink: #e0393e;
+  color: var(--color-hi);
+}
+[data-theme='light'] .alert-overlay {
+  --color-warn3-ink: #ff6870;
+}
+.alert-overlay-scrim {
+  background: rgb(11 13 14 / 0.9);
+}
+
+/* 알림 단계 페이지 — 단계별 색상을 카드 구조 자체로 보여준다. */
+.stage-card {
+  position: relative;
+  overflow: hidden;
+  border-color: var(--stage-border);
+  background: linear-gradient(145deg, var(--stage-soft), transparent 42%), var(--color-surface);
+}
+.stage-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--stage-accent);
+}
+.stage-card-warn1,
+.floating-widget-alert-warn1 {
+  --stage-accent: #e6b345;
+  --stage-accent-rgb: 230 179 69;
+  --stage-soft: rgb(230 179 69 / 0.13);
+  --stage-border: rgb(230 179 69 / 0.5);
+}
+.stage-card-warn2,
+.floating-widget-alert-warn2 {
+  --stage-accent: #ef8b4e;
+  --stage-accent-rgb: 239 139 78;
+  --stage-soft: rgb(239 139 78 / 0.13);
+  --stage-border: rgb(239 139 78 / 0.52);
+}
+.stage-card-warn3,
+.floating-widget-alert-warn3 {
+  --stage-accent: #e0393e;
+  --stage-accent-rgb: 224 57 62;
+  --stage-soft: rgb(224 57 62 / 0.12);
+  --stage-border: rgb(224 57 62 / 0.55);
+}
+.stage-card .stage-kicker,
+.stage-card .stage-icon {
+  color: var(--stage-accent);
+}
+.stage-card .stage-icon {
+  border: 1px solid var(--stage-border);
+  background: var(--stage-soft);
+}
+.stage-card .stage-action {
+  border-color: var(--stage-border);
+  color: var(--stage-accent);
+}
+.stage-card .stage-action:hover {
+  background: var(--stage-soft);
+}
+.stage-card .stage-hint {
+  color: color-mix(in srgb, var(--stage-accent) 72%, var(--color-dim));
+}
+.stage-node-icon {
+  border: 1px solid var(--stage-border, var(--color-line));
+  background: var(--stage-soft, rgb(255 255 255 / 0.03));
+}
+.stage-node-warn1 { --stage-accent: #e6b345; --stage-soft: rgb(230 179 69 / 0.1); --stage-border: rgb(230 179 69 / 0.4); }
+.stage-node-warn2 { --stage-accent: #ef8b4e; --stage-soft: rgb(239 139 78 / 0.1); --stage-border: rgb(239 139 78 / 0.42); }
+.stage-node-warn3 { --stage-accent: #e0393e; --stage-soft: rgb(224 57 62 / 0.1); --stage-border: rgb(224 57 62 / 0.45); }
+
+/* 우측 하단 위젯 / PiP — 상태색을 표면·테두리·단계 도트에 함께 반영 */
+.floating-widget {
+  background-color: color-mix(in srgb, var(--color-surface) 92%, var(--color-ink));
+  box-shadow: 0 8px 22px rgb(0 0 0 / 0.2), 0 0 0 1px var(--color-line-strong);
+}
+.floating-widget-panel {
+  border-color: var(--color-line-strong);
+  box-shadow: 0 14px 34px rgb(0 0 0 / 0.22), 0 0 0 1px var(--color-line);
+}
+.floating-widget-alert {
+  border-color: var(--stage-border);
+  background: linear-gradient(145deg, var(--stage-soft), transparent 70%), var(--color-surface);
+}
+.floating-widget-ring {
+  border-color: var(--stage-accent);
+}
+.floating-widget-dot-active {
+  background-color: var(--stage-accent);
+}
+.floating-widget-dot-idle {
+  background-color: var(--color-line-strong);
+}
+.floating-widget-pip {
+  border-top-color: var(--color-line-strong);
+  background-color: var(--color-raised);
+  box-shadow: inset 0 1px 0 var(--color-line-strong);
+}
+
+[data-theme='light'] .stage-card-warn1,
+[data-theme='light'] .floating-widget-alert-warn1,
+[data-theme='light'] .stage-node-warn1 {
+  --stage-accent: #8a6200;
+  --stage-accent-rgb: 138 98 0;
+  --stage-soft: rgb(138 98 0 / 0.11);
+  --stage-border: rgb(138 98 0 / 0.52);
+}
+[data-theme='light'] .stage-card-warn2,
+[data-theme='light'] .floating-widget-alert-warn2,
+[data-theme='light'] .stage-node-warn2 {
+  --stage-accent: #a54b15;
+  --stage-accent-rgb: 165 75 21;
+  --stage-soft: rgb(165 75 21 / 0.11);
+  --stage-border: rgb(165 75 21 / 0.54);
+}
+[data-theme='light'] .stage-card-warn3,
+[data-theme='light'] .floating-widget-alert-warn3,
+[data-theme='light'] .stage-node-warn3 {
+  --stage-accent: #b52f38;
+  --stage-accent-rgb: 181 47 56;
+  --stage-soft: rgb(181 47 56 / 0.1);
+  --stage-border: rgb(181 47 56 / 0.56);
+}
+[data-theme='light'] .floating-widget {
+  box-shadow: 0 8px 22px rgb(11 13 14 / 0.16), 0 0 0 1px rgb(11 13 14 / 0.12);
+}
+[data-theme='light'] .floating-widget-panel {
+  box-shadow: 0 14px 34px rgb(11 13 14 / 0.16), 0 0 0 1px rgb(11 13 14 / 0.1);
+}
+
+/* 리포트의 녹색은 라이트 배경에서 무겁지 않도록 한 단계 밝게 */
+[data-theme='light'] .report-page {
+  --color-good: #218a63;
+  --color-good-ink: #287b5b;
+  --chart-viz1: #218a63;
+  --chart-viz1-rgb: 33 138 99;
+  --chart-viz1-soft-fill: rgb(33 138 99 / 0.13);
+  --chart-viz1-soft-stroke: rgb(33 138 99 / 0.46);
 }
 
 /* 은은한 배경 분위기 — 하루 종일 떠 있는 앱이므로 조용하게 */
 .app-bg {
   background:
-    radial-gradient(1100px 700px at 75% -10%, rgb(62 201 143 / 0.05), transparent 60%),
-    radial-gradient(900px 600px at -5% 105%, rgb(94 135 201 / 0.045), transparent 55%),
+    radial-gradient(1100px 700px at 75% -10%, var(--app-glow), transparent 60%),
+    radial-gradient(900px 600px at -5% 105%, var(--app-glow-secondary), transparent 55%),
     var(--color-ink);
 }
 
