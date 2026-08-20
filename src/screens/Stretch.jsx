@@ -324,7 +324,8 @@ function ActiveSession({ stretch, onExit }) {
       const ev = lm ? rule(lm, { ref: ruleCtxRef.current }) : null
       drawPose(canvasRef.current, video, lm, Boolean(ev?.all))
       if (ev?.all) heldRef.current = Math.min(holdTarget, heldRef.current + TICK_MS)
-      else heldRef.current = Math.max(0, heldRef.current - TICK_MS * 1.5)
+      // 이탈 시엔 쌓는 속도의 절반으로만 되감아서, 판정이 잠깐 흔들려도 진행을 크게 잃지 않게
+      else heldRef.current = Math.max(0, heldRef.current - TICK_MS * 0.5)
       setHeldMs(heldRef.current)
       setLive({ conds: ev?.conds ?? null, hint: ev?.hint ?? null, detected: Boolean(lm) })
       if (heldRef.current >= holdTarget) complete()
