@@ -106,7 +106,7 @@ export default function Environment() {
         <DynamicDeskDiagram data={envData} />
       </Card>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {envData.checks.map((c, i) => (
           <Card key={c.id} className={`rise d${i + 2} flex flex-col p-6 ${c.ok ? '' : 'border-warn1/25'}`}>
             <div className="flex items-start justify-between gap-3">

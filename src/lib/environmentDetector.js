@@ -49,14 +49,6 @@ export function analyzeEnvironment(calibration) {
           finding: '화면 상단과 눈높이의 단차가 적정 범위여서 목 뒤쪽 근육의 부담이 적어요.',
           fix: '맥북 거치대로 화면 상단이 눈높이와 수평을 이루도록 유지해 주세요.',
         },
-        {
-          id: 'chair',
-          name: '의자 · 어깨 균형',
-          ok: true,
-          value: '좌우 대칭 0.8°',
-          finding: '양쪽 어깨 높낮이가 대칭이며 팔걸이와 의자 높이가 안정적이에요.',
-          fix: '양발을 바닥에 평평하게 두고 양팔을 책상에 편안히 얹는 자세를 유지하세요.',
-        },
       ],
     }
   }
@@ -108,7 +100,7 @@ export function analyzeEnvironment(calibration) {
   // 거북목 머리 오프셋 (모식도 렌더링용)
   const headXOffset = isClose ? 14 : gazeStatus === 'low' ? 10 : 0
 
-  // ── 4가지 진단 카드 생성 ──────────────────────────────────────────
+  // ── 3가지 핵심 진단 카드 생성 ──────────────────────────────────────────
   const checks = [
     {
       id: 'distance',
@@ -161,20 +153,6 @@ export function analyzeEnvironment(calibration) {
           : gazeStatus === 'high'
             ? '의자 높이를 올리거나 모니터 거치대를 약간 낮춰주세요.'
             : '화면 상단이 눈높이와 일치하는 지금 세팅을 유지해 주세요.',
-    },
-    {
-      id: 'chair',
-      name: '의자 · 어깨 균형',
-      ok: shoulderStatus === 'ok',
-      value: `좌우 기울기 ${shoulderTiltDeg}° · ${shoulderStatus === 'ok' ? '균형' : '비대칭 주의'}`,
-      finding:
-        shoulderStatus === 'tilt'
-          ? '양쪽 어깨 높낮이에 비대칭이 감지되어 한쪽 팔걸이에 체중이 실려 있어요.'
-          : '양쪽 어깨가 수평을 이루고 있어 척추가 곧게 펴져 있어요.',
-      fix:
-        shoulderStatus === 'tilt'
-          ? '턱을 괴거나 한쪽으로 기대지 말고, 양쪽 엉덩이에 체중을 고르게 분산해 앉아주세요.'
-          : '양발을 바닥에 온전히 닿게 하고 엉덩이를 의자 깊숙이 밀착해 주세요.',
     },
   ]
 
