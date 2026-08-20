@@ -56,6 +56,8 @@ sequenceDiagram
 | code | HTTP | 설명 |
 | --- | --- | --- |
 | `INVALID_INPUT` | 400 | 필수값 누락, 형식 오류, JSON 파싱 실패. `message` 에 어떤 필드가 왜 틀렸는지 담긴다 |
+| `NOT_FOUND` | 404 | 존재하지 않는 경로 |
+| `METHOD_NOT_ALLOWED` | 405 | 경로는 맞지만 HTTP 메서드가 다름 |
 | `INVALID_PRODUCT_KEY` | 403 | 제품 키 불일치 (현재 verify API 는 예외 대신 `valid:false` 로 응답) |
 | `DUPLICATE_EMAIL` | 409 | 이미 가입된 이메일 |
 | `LOGIN_FAILED` | 401 | 이메일 또는 비밀번호 불일치 |
@@ -77,6 +79,13 @@ sequenceDiagram
 | POST | `/api/signup` | ✕ | 회원가입 |
 | POST | `/api/login` | ✕ | 로그인 (Access Token 발급) |
 | GET | `/api/me` | ✓ | 내 정보 조회 |
+| POST | `/api/monitoring/minute-logs` | ✓ | 1분 버퍼링 로그 저장 |
+| POST | `/api/monitoring/end` | ✓ | 모니터링 종료 & 레포트 생성 (AI 분석 포함) |
+| GET | `/api/reports/dashboard` | ✓ | 레포트 화면 전체 대시보드 조회 (최근 14일, 주간비교, 스탯) |
+| GET | `/api/reports/daily` | ✓ | 특정 날짜 일일 레포트 상세 조회 |
+| GET | `/api/reports/calendar` | ✓ | 달력 잔디(히트맵) 조회 |
+| GET | `/api/settings` | ✓ | 사용자 설정 조회 (저장 전이면 기본값) |
+| PUT | `/api/settings` | ✓ | 사용자 설정 저장(업서트) |
 
 ---
 
@@ -297,6 +306,105 @@ curl http://localhost:8080/api/me \
 
 ---
 
+## 7-1. 사용자 설정 (인증 필요)
+
+회원당 1행. 프론트는 앱 시작 시 `GET` 으로 불러오고, 설정 화면 저장 버튼에서 `PUT` 으로 전체를 덮어쓴다.
+
+### 설정 항목
+
+| 필드 | 타입 | 허용값 | 기본값 | 의미 |
+| --- | --- | --- | --- | --- |
+| `sensitivity` | int | 0 ~ 100 | `50` | 판정 민감도 슬라이더 |
+| `sound` | string | `chime` \| `wood` \| `funny` \| `none` | `chime` | 알림음 |
+| `maxAlertLevel` | int | 1 ~ 3 | `2` | 알림 단계 상한 (3은 옵트인) |
+| `stretchMin` | int | 30 ~ 90 (10 단위) | `50` | 스트레칭 제안 주기(분) |
+
+> 기본값은 `settings/MemberSettings.java` 의 `DEFAULT_*` 상수가 유일한 출처다.
+> **프론트가 쓰는 기본값과 어긋나면 안 된다** — 바꿀 때는 양쪽을 같이 수정할 것.
+
+### `PUT /api/settings` — 저장(업서트)
+
+없으면 생성, 있으면 갱신한다. **4개 필드를 모두 보내야 한다** (부분 업데이트 미지원).
+
+**Request**
+
+```json
+{ "sensitivity": 50, "sound": "chime", "maxAlertLevel": 2, "stretchMin": 50 }
+```
+
+**Response `200 OK`** — 저장된 값 그대로
+
+```json
+{ "sensitivity": 50, "sound": "chime", "maxAlertLevel": 2, "stretchMin": 50 }
+```
+
+**Error**
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| 필드 누락, 범위 밖 값, 허용되지 않은 `sound`, 10분 단위가 아닌 `stretchMin` | 400 | `INVALID_INPUT` |
+| 인증 실패 | 401 | `UNAUTHORIZED` / `INVALID_TOKEN` / `EXPIRED_TOKEN` |
+
+`message` 에 어떤 필드가 왜 틀렸는지 담긴다. 여러 개가 동시에 틀리면 쉼표로 이어서 내려온다.
+
+```json
+{
+  "code": "INVALID_INPUT",
+  "message": "sound: sound 는 chime, wood, funny, none 중 하나여야 합니다., stretchMin: stretchMin 은 10분 단위여야 합니다. (30, 40, 50, 60, 70, 80, 90)"
+}
+```
+
+> 필드를 아예 빠뜨리면 `0` 으로 채워지지 않고 `400` 이 난다. (`sensitivity: sensitivity 는 필수입니다.`)
+
+### `GET /api/settings` — 조회
+
+**항상 `200`** 이다. 한 번도 저장한 적 없는 회원에게는 서버가 기본값을 채워서 내려준다.
+(이때 `member_settings` 행이 만들어지지는 않는다 — 실제 저장은 `PUT` 에서만 일어난다.)
+
+**Response `200 OK`**
+
+```json
+{ "sensitivity": 50, "sound": "chime", "maxAlertLevel": 2, "stretchMin": 50 }
+```
+
+**Error**
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| 인증 실패 | 401 | `UNAUTHORIZED` / `INVALID_TOKEN` / `EXPIRED_TOKEN` |
+
+> 저장 여부와 무관하게 항상 값이 내려오므로, 프론트에서 404 분기는 필요 없다.
+
+### 예시
+
+```bash
+# 저장
+curl -X PUT http://localhost:8080/api/settings \
+  -H "Authorization: Bearer <AT>" -H 'Content-Type: application/json' \
+  -d '{"sensitivity":70,"sound":"funny","maxAlertLevel":3,"stretchMin":40}'
+
+# 조회
+curl http://localhost:8080/api/settings -H "Authorization: Bearer <AT>"
+```
+
+### 테이블
+
+```sql
+CREATE TABLE member_settings (
+  member_id       BIGINT       PRIMARY KEY,   -- member.id FK (회원당 1행)
+  sensitivity     INT          NOT NULL,
+  sound           VARCHAR(20)  NOT NULL,      -- CHIME | WOOD | FUNNY | NONE (DB는 대문자)
+  max_alert_level INT          NOT NULL,
+  stretch_min     INT          NOT NULL,
+  updated_at      TIMESTAMP    NOT NULL
+);
+```
+
+> `sound` 는 API 로는 소문자, DB 에는 대문자로 저장된다 (`settings/AlertSound.java`).
+> 알림음을 추가할 때는 `AlertSound` enum 과 `SettingsRequest.sound` 의 `@Pattern` 정규식을 **함께** 수정해야 한다.
+
+---
+
 ## 8. 인증이 필요한 API 추가하기 (팀원용)
 
 `/api/**` 는 기본적으로 전부 인증이 걸린다. 컨트롤러 파라미터에 `@LoginMember Member member` 만 선언하면
@@ -371,6 +479,11 @@ com.example.ktb_hktn_team2
 | `app.product-key.value` | `PRODUCT_KEY` | `9999` |
 | `app.jwt.secret` | `JWT_SECRET` | 로컬 개발용 문자열 (**운영에서는 반드시 교체**) |
 | `app.jwt.access-token-expiration` | `JWT_EXPIRATION` | `1h` |
+
+`mysql` 프로파일에서 쓰는 DB 설정 (환경변수로 덮어쓰기 가능).
+
+| 설정 | 환경변수 | 기본값 |
+| --- | --- | --- |
 | `spring.datasource.url` | `DB_URL` | `jdbc:mysql://localhost:3306/ktb_hktn_team2` |
 | `spring.datasource.username` | `DB_USERNAME` | `root` |
 | `spring.datasource.password` | `DB_PASSWORD` | `root` |
@@ -381,12 +494,27 @@ JWT 서명 알고리즘은 시크릿 길이에 따라 자동 선택된다 (32바
 ### 실행
 
 ```bash
-# MySQL 사용 (기본)
+# 기본: H2 인메모리 (DB 설치 불필요, 바로 실행됨)
 ./gradlew bootRun
 
-# MySQL 없이 H2 인메모리로 바로 띄우기
-./gradlew bootRun --args='--spring.profiles.active=local'
+# MySQL 로 붙일 때
+./gradlew bootRun --args='--spring.profiles.active=mysql'
 ```
+
+기본 프로파일은 H2 인메모리(`ddl-auto: create-drop`)라 **재시작하면 가입한 회원이 사라진다.**
+데이터를 남기려면 `application.yaml` 의 datasource url 을 파일 모드로 바꾼다.
+
+```yaml
+url: jdbc:h2:file:./data/ktb;MODE=MySQL
+```
+
+DB 안을 직접 들여다보려면 앱 실행 후 **http://localhost:8080/h2-console** 접속 →
+JDBC URL 에 `jdbc:h2:mem:ktb`, User Name `sa`, Password 빈 값으로 로그인.
+
+> MySQL 프로파일은 `ddl-auto: update` 이고, `ktb_hktn_team2` 데이터베이스가 미리 만들어져 있어야 한다.
+> ```sql
+> CREATE DATABASE ktb_hktn_team2 DEFAULT CHARACTER SET utf8mb4;
+> ```
 
 ### CORS
 
