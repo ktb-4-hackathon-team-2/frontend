@@ -261,11 +261,12 @@ export function AppProvider({ children }) {
       })
   }, [authStatus])
 
-  // 1초 심장박동 — 모니터링 시간 + 스트레칭 카운트다운
+  // 1초 심장박동 — 모니터링 시간 + 스트레칭 카운트다운.
+  // 모니터링 시간은 실제로 측정 중일 때만 누적한다 (카메라 꺼짐·권한 거부·스트레칭 화면은 제외)
   useEffect(() => {
     if (paused) return
     const id = setInterval(() => {
-      setElapsedSec((s) => s + 1)
+      if (monitoringOn) setElapsedSec((s) => s + 1)
       setStretchLeft((s) => {
         if (s <= 1) {
           setStretchSuggest(true)
@@ -275,7 +276,7 @@ export function AppProvider({ children }) {
       })
     }, 1000)
     return () => clearInterval(id)
-  }, [paused, settings.stretchMin])
+  }, [paused, settings.stretchMin, monitoringOn])
 
   // 감지 루프 — 판정은 전부 이 기기 안에서 (AI 레포 posture.py 포팅판).
   // 프레임/랜드마크를 서버로 보내지 않는다. 스트레칭 화면을 제외한 모든 화면에서 동작.
@@ -403,7 +404,10 @@ export function AppProvider({ children }) {
       pausedMs += now - s.pausedSince
       s.pausedSince = now
     }
-    if (s.samples.length > 0 || pausedMs > 0) {
+    // 샘플이 있는 창만 전송한다 — 전면 일시정지 창(ticks=0)을 보내면 백엔드가
+    // 기본값으로 '60초 모니터링·100% 바른 자세'로 적재해 통계가 부풀고,
+    // 모니터링 종료 후에도 유휴 창이 무한 전송되는 원인이었다
+    if (s.samples.length > 0) {
       const good = s.samples.filter((x) => x.ok).length
       const n = s.samples.length
       enqueueStats({
@@ -439,8 +443,33 @@ export function AppProvider({ children }) {
 
   // 모니터링 종료 — 잔여 집계를 즉시 전송하고 카메라를 끈 뒤 세션 요약 화면으로.
   // 유지율·알림 횟수는 즉시 보여주고, AI 코멘트는 추후 리포트 분석이 채운다.
+  // 세션 중 스트레칭 제안/수행 횟수 — 종료 시 backend로 보내 AI 리포트 분석의 입력이 된다.
+  // (이걸 안 보내면 리포트의 스트레칭 수치가 항상 0/0으로 잡힌다)
+  const stretchStatsRef = useRef({ suggested: 0, done: 0 })
+  // settings를 deps에 넣으면 제안이 떠 있는 동안 설정을 바꿀 때마다 소리가 다시 나므로 ref로 읽는다
+  const settingsRef = useRef(settings)
+  settingsRef.current = settings
+  useEffect(() => {
+    if (!stretchSuggest) return
+    stretchStatsRef.current.suggested += 1
+    // 스트레칭 제안도 알림음으로 알린다 (무음·조용한 시간대 설정은 maybeChime이 존중)
+    maybeChime(settingsRef.current)
+  }, [stretchSuggest])
+  const markStretchDone = useCallback(() => {
+    stretchStatsRef.current.done += 1
+  }, [])
+
   const endMonitoring = useCallback(() => {
     flushWindow(false)
+    // 스트레칭 통계를 실어 종료를 알린다 — backend가 당일 집계 + AI 분석까지 수행
+    const st = stretchStatsRef.current
+    const token = getAccessToken()
+    if (token) {
+      api
+        .endMonitoringSession({ stretchSuggested: st.suggested, stretchDone: st.done }, token)
+        .catch((e) => console.warn('모니터링 종료 집계 전송 실패:', e))
+    }
+    stretchStatsRef.current = { suggested: 0, done: 0 }
     const agg = sessionAggRef.current
     setSessionSummary({
       endedAt: Date.now(),
@@ -468,11 +497,12 @@ export function AppProvider({ children }) {
   // 3단계 진입 순간엔 선택한 알림음 대신 공습경보 사이렌 (0→3 직행 시 이중 재생 방지)
   const prevLevel = useRef(0)
   useEffect(() => {
-    if (effectiveLevel >= 2 && prevLevel.current < 2) setAlertCount((c) => c + 1)
+    // 데모 트리거는 소리·화면만 미리보기 — 실제 알림 횟수 통계는 오염시키지 않는다
+    if (effectiveLevel >= 2 && prevLevel.current < 2 && !demoAlert) setAlertCount((c) => c + 1)
     if (effectiveLevel >= 3 && prevLevel.current < 3) maybeSiren(settings)
     else if (effectiveLevel >= 2 && prevLevel.current < 2) maybeChime(settings)
     prevLevel.current = effectiveLevel
-  }, [effectiveLevel, settings])
+  }, [effectiveLevel, settings, demoAlert])
 
   const triggerDemo = useCallback((level) => {
     clearTimeout(demoTimer.current)
@@ -518,6 +548,7 @@ export function AppProvider({ children }) {
     setStretchLeft(settings.stretchMin * 60)
     setStretchSuggest(false)
     sessionAggRef.current = { good: 0, total: 0 }
+    stretchStatsRef.current = { suggested: 0, done: 0 }
   }, [settings.stretchMin])
 
   const updateSetting = useCallback((key, value) => {
@@ -559,7 +590,7 @@ export function AppProvider({ children }) {
     settings, setSettings, updateSetting,
     alertCount, elapsedSec, stretchLeft, stretchSuggest, setStretchSuggest,
     postponeStretch, startStretchNow, adjustStretch, resetSession, endMonitoring, sessionSummary,
-    requestStretch,
+    requestStretch, markStretchDone,
     tick, camera, detectionVideoRef, lastLandmarksRef, localDetection, pose,
     pipWindow, openFloatingWidget, closeFloatingWidget,
     cameraView, setCameraView,

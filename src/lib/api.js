@@ -72,6 +72,9 @@ export const api = {
   /** POST /api/reports/daily/analyze — AI 일일 리포트 분석 요청 / 재생성 */
   analyzeDailyReport: (date, token) => request(`/api/reports/daily/analyze${date ? `?date=${date}` : ''}`, { method: 'POST', token }),
 
+  /** POST /api/monitoring/end — 모니터링 종료 시 당일 집계 + AI 분석 (스트레칭 제안/수행 횟수 전달) */
+  endMonitoringSession: (body, token) => request('/api/monitoring/end', { method: 'POST', body, token }),
+
   // ── ⚙️ 사용자 설정 API (docs/api-spec.md 7-1) ──
   /** GET /api/settings — 항상 200. 저장 전이면 서버가 기본값을 채워서 내려준다 (404 분기 불필요) */
   getSettings: (token) => request('/api/settings', { token }),
