@@ -129,8 +129,8 @@ export function AlertLayer() {
 }
 
 function FullOverlay({ onResolve, rec, onStretch }) {
-  // 오버레이가 떠 있는 동안의 경과 시간 — 실제로는 자세 복구 감지로 사라진다
-  const [sec, setSec] = useState(134)
+  // 오버레이가 뜬 순간부터의 경과 시간 — 0초에서 시작해 자세 복구 감지로 사라진다
+  const [sec, setSec] = useState(0)
   useEffect(() => {
     const id = setInterval(() => setSec((s) => s + 1), 1000)
     return () => clearInterval(id)
