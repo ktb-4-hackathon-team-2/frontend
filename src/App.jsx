@@ -5,7 +5,6 @@ import { RouterProvider, useRouter } from './state/RouterContext'
 import { Sidebar } from './components/Sidebar'
 import { Widget, WidgetModeBackdrop, FloatingWidgetPortal } from './components/Widget'
 import { pipSupported } from './lib/pip'
-import { DebugPanel } from './components/DebugPanel'
 import { AlertLayer } from './components/AlertLayer'
 import { Btn, Chip, Icon, MicroLabel, PostureFigure } from './components/ui'
 import Auth from './screens/Auth'
@@ -151,7 +150,6 @@ function Root() {
       {!calibrated ? <Onboarding /> : widgetMode ? <WidgetModeBackdrop /> : <Shell />}
       {calibrated && <Widget />}
       <FloatingWidgetPortal />
-      <DebugPanel />
       <AlertLayer />
     </div>
   )

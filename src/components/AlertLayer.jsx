@@ -166,9 +166,7 @@ function FullOverlay({ onResolve, rec, onStretch }) {
             {rec.name}로 풀어주기 · {rec.hold}초
           </Btn>
         )}
-        <p className="mt-4 text-xs text-dim">
-          실제 서비스에선 자세 복구가 감지되면 자동으로 사라져요 — 지금은 버튼으로 시뮬레이션합니다.
-        </p>
+        <p className="mt-4 text-xs text-dim">자세 복구가 감지되면 자동으로 사라져요.</p>
       </div>
     </div>
   )
