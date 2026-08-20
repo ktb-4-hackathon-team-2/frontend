@@ -6,7 +6,6 @@ const NAV = [
   { id: 'report', icon: 'chart', label: '리포트' },
   { id: 'stretch', icon: 'person', label: '스트레칭' },
   { id: 'environment', icon: 'desk', label: '환경 가이드' },
-  { id: 'posture', icon: 'target', label: '바른 자세란?' },
   { id: 'alerts', icon: 'bell', label: '알림 단계' },
   { id: 'settings', icon: 'sliders', label: '설정' },
 ]
