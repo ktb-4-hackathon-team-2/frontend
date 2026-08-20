@@ -334,7 +334,10 @@ function ActiveSession({ stretch, onExit }) {
   const rule = STRETCH_RULES[stretch.id]
   const pose = usePoseLandmarker(true)
   const camOn = camera.status === 'active'
-  const camBlocked = ['denied', 'notfound', 'busy', 'error'].includes(camera.status)
+  // 'idle'도 포함 — 진행 중 웹캠이 뽑히거나 카메라를 끄면 status가 idle로 돌아오는데,
+  // 목록에 없으면 tracking도 timerMode도 아닌 데드 상태로 진행이 영구 정지한다
+  // (최초 마운트의 idle은 아래 자동 시작 effect가 곧바로 requesting으로 전환)
+  const camBlocked = ['idle', 'denied', 'notfound', 'busy', 'error'].includes(camera.status)
   const tracking = Boolean(rule) && camOn && pose.status === 'ready'
   // 판정 룰이 없거나(턱 당기기) 카메라/모델을 못 쓰면 타이머로 진행
   const timerMode = !rule || pose.status === 'error' || camBlocked
