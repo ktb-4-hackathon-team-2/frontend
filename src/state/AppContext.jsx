@@ -446,8 +446,14 @@ export function AppProvider({ children }) {
   // 세션 중 스트레칭 제안/수행 횟수 — 종료 시 backend로 보내 AI 리포트 분석의 입력이 된다.
   // (이걸 안 보내면 리포트의 스트레칭 수치가 항상 0/0으로 잡힌다)
   const stretchStatsRef = useRef({ suggested: 0, done: 0 })
+  // settings를 deps에 넣으면 제안이 떠 있는 동안 설정을 바꿀 때마다 소리가 다시 나므로 ref로 읽는다
+  const settingsRef = useRef(settings)
+  settingsRef.current = settings
   useEffect(() => {
-    if (stretchSuggest) stretchStatsRef.current.suggested += 1
+    if (!stretchSuggest) return
+    stretchStatsRef.current.suggested += 1
+    // 스트레칭 제안도 알림음으로 알린다 (무음·조용한 시간대 설정은 maybeChime이 존중)
+    maybeChime(settingsRef.current)
   }, [stretchSuggest])
   const markStretchDone = useCallback(() => {
     stretchStatsRef.current.done += 1

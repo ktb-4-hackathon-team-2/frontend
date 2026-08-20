@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useApp } from '../state/AppContext'
 import { Btn, Card, Chip, Icon, MicroLabel, PostureFigure, TONE } from './ui'
-import { fmtDur } from '../lib/format'
+import { fmtClock, fmtDur } from '../lib/format'
 
 const STAGE_LABEL = { good: '양호', warn1: '주의', warn2: '경고', warn3: '심각' }
 
@@ -112,7 +112,10 @@ export function Widget() {
 // 플로팅 위젯 (Document PiP) — 다른 앱 위에 떠 있는 창에 포털로 렌더.
 // 메인 앱과 같은 React 트리라 자세 상태가 실시간으로 반영된다.
 export function FloatingWidgetPortal() {
-  const { pipWindow, posture, meta, paused, setPaused, warnLevel, demoAlert, localDetection, theme } = useApp()
+  const {
+    pipWindow, posture, meta, paused, setPaused, warnLevel, demoAlert, localDetection, theme,
+    stretchLeft, stretchSuggest,
+  } = useApp()
 
   useEffect(() => {
     if (!pipWindow) return
@@ -156,9 +159,24 @@ export function FloatingWidgetPortal() {
             />
           ))}
         </div>
-        <p className="mt-1.5 truncate text-[11px] text-dim">
-          {paused ? '모니터링이 멈춰 있어요' : (localDetection.reason ?? '조용히 지켜보는 중')}
-        </p>
+        {/* 상태 문구 + 다음 스트레칭 카운트다운 — 창 크기는 그대로 두고 기존 한 줄에 나눠 담는다 */}
+        <div className="mt-1.5 flex items-center gap-2">
+          {stretchSuggest && !paused ? (
+            <span className="breathe flex min-w-0 flex-1 items-center gap-1 text-[11px] font-semibold text-good">
+              <Icon name="clock" size={11} className="shrink-0" />
+              스트레칭 하세요
+            </span>
+          ) : (
+            <>
+              <p className="min-w-0 flex-1 truncate text-[11px] text-dim">
+                {paused ? '모니터링이 멈춰 있어요' : (localDetection.reason ?? '조용히 지켜보는 중')}
+              </p>
+              <span className="shrink-0 font-mono text-[11px] text-mid" title="다음 스트레칭까지">
+                {fmtClock(stretchLeft)}
+              </span>
+            </>
+          )}
+        </div>
       </div>
       {/* 일시정지/재개 — 같은 React 트리라 메인 앱의 setPaused 를 그대로 호출 (카메라도 함께 꺼지고 켜진다) */}
       <button
