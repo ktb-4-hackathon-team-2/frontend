@@ -28,9 +28,6 @@ npm run dev            # http://localhost:5173
 | 변수 | 용도 | 기본값 |
 |---|---|---|
 | `VITE_API_BASE` | 앱 서버(Spring) — 인증·리포트·통계 | `http://localhost:8080` |
-| `VITE_AI_API_BASE` (또는 `VITE_AI_URL`) | AI 서버(FastAPI) — 캘리브레이션 baseline 등록 | `.env.example` 참고 |
-
-`VITE_AI_API_BASE`를 비우면 AI 서버 없이도 전체 기능이 로컬 판정만으로 동작합니다.
 
 ### 데모 순서 (해커톤 시연용)
 
@@ -51,13 +48,13 @@ npm run dev            # http://localhost:5173
 │  · 자세 판정 = posture.py 포팅판 (전부 로컬)     │
 │  · 1분 집계만 서버로 전송                       │
 └──────┬──────────────────────────┬───────────┘
-       │ JWT (Bearer)             │ 캘리브레이션 한 컷
-       ▼                          ▼
+       │ JWT (Bearer)
+       ▼
 ┌──────────────────┐   ┌──────────────────────┐
 │ 앱 서버 (Spring)   │   │ AI 서버 (FastAPI)      │
 │ :8080             │   │ :8000                 │
-│ · 인증/회원        │   │ · /api/calibrate      │
-│ · 리포트 집계/조회  │──▶│ · 리포트 LLM 분석      │
+│ · 인증/회원        │   │ · 리포트 LLM 분석      │
+│ · 리포트 집계/조회  │──▶│   (Spring이 호출)     │
 │ · 1분 통계 수집*    │   │   (Spring이 호출)     │
 └──────────────────┘   └──────────────────────┘
 ```
@@ -128,8 +125,7 @@ npm run dev            # http://localhost:5173
 3. **체크가 모두 충족되면 자동으로 홀드 시작** — 150ms마다 스켈레톤을 스택
 4. 3초 유지 성공 → 스택 **좌표 평균**을 기준 자세로 저장 (노이즈 상쇄)
 5. **중간에 체크가 하나라도 풀리면 스택·타이머 초기화** (감쇠 없음, 처음부터)
-6. 완료 시 AI 서버 `POST /api/calibrate`로 한 컷 등록 → `baseline_id` 보관
-   (서버도 스켈레톤만 저장 — 이미지 저장 없음. 이 호출이 실패해도 로컬 판정은 정상 동작)
+6. 완료 시 평균낸 관절 좌표를 브라우저 로컬 기준 자세로 저장
 
 기준 자세는 메모리에만 있어 새로고침 시 재캘리브레이션이 필요합니다(프로토타입 의도).
 
@@ -172,7 +168,6 @@ npm run dev            # http://localhost:5173
 | 인증 (`/api/product-key/verify` `/api/signup` `/api/login` `/api/me`) | → Spring | ✅ 연동 |
 | 리포트 (`/api/reports/dashboard` `/daily` `/calendar` `/daily/analyze`) | → Spring | ✅ 연동 |
 | 1분 집계 (`POST /api/monitor/stats`) | → Spring | ⚠ **백엔드 신규 API 필요** — 실패 시 큐(30분치) 보관·재시도, 탭 종료 시 keepalive 플러시 |
-| 캘리브레이션 (`POST /api/calibrate`) | → AI | ✅ 연동 (캘리브레이션 완료 시 한 컷) |
 | 리포트 LLM 분석 (`/api/report/daily/analyze`) | Spring → AI | 백엔드 경유 |
 
 ---
@@ -191,7 +186,6 @@ src/
     guides.js             캘리브레이션 가이드 정합 (guides.py 포팅, 완화판)
     statsReporter.js      1분 집계 전송기 (큐·재시도·keepalive) + payload 스키마
     api.js                앱 서버 클라이언트 (인증·리포트)
-    aiApi.js              AI 서버 클라이언트 (calibrate·프레임 캡처)
     sound.js / format.js  알림음(WebAudio+wav) · 시간 포맷
   hooks/
     useCamera.js          getUserMedia 상태 머신 (권한/점유/없음 전부 처리)
