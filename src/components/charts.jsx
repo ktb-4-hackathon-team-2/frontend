@@ -225,8 +225,8 @@ export function WeekCompareChart({ thisWeek, lastWeek, weekdays }) {
   )
 }
 
-// ── 시간대별 패턴 (컬럼) ─────────────────────────────────────────────
-export function HourlyChart({ data }) {
+// ── 시간대별 패턴 (오늘 vs 어제 비교 2중 컬럼 & 클릭 드릴다운) ────────────
+export function HourlyChart({ data = [], yesterdayData = [], onSelectHour, selectedHour = null }) {
   const { boxRef, show, hide, el } = useTip()
   const W = 660
   const H = 200
@@ -237,10 +237,21 @@ export function HourlyChart({ data }) {
   const iw = W - padL - padR
   const ih = H - padT - padB
   const yFor = (v) => padT + (1 - v / 100) * ih
-  const slot = iw / data.length
-  const bw = Math.min(24, slot * 0.5)
-  const max = Math.max(...data.map((d) => d.rate))
-  const min = Math.min(...data.map((d) => d.rate))
+  const slot = iw / (data.length || 1)
+  const hasYesterday = yesterdayData && yesterdayData.length > 0
+
+  // 어제 데이터를 시간(hour 또는 h)으로 빠른 매핑
+  const yMap = new Map()
+  if (hasYesterday) {
+    yesterdayData.forEach((yd) => {
+      const key = yd.hour != null ? yd.hour : yd.h
+      yMap.set(key, yd)
+    })
+  }
+
+  // 2중 막대 폭 계산
+  const groupBw = Math.min(26, slot * 0.6)
+  const singleBw = hasYesterday ? Math.max(7, (groupBw - 3) / 2) : Math.min(22, slot * 0.5)
 
   return (
     <div ref={boxRef} className="relative">
@@ -255,26 +266,106 @@ export function HourlyChart({ data }) {
         ))}
         {data.map((d, i) => {
           const cx = padL + slot * i + slot / 2
-          const y = yFor(d.rate)
-          const extreme = d.rate === max || d.rate === min
+          const yToday = yFor(d.rate)
+          const yHour = d.hour != null ? d.hour : d.h
+          const yData = yMap.get(yHour)
+          const yYesterday = yData ? yFor(yData.rate) : null
+
+          const isSelected = selectedHour != null && (selectedHour === d.hour || selectedHour === d.h)
+          const delta = yData ? d.rate - yData.rate : null
+
+          // 어제 막대 x좌표, 오늘 막대 x좌표
+          const xYesterday = cx - groupBw / 2
+          const xToday = hasYesterday ? cx - groupBw / 2 + singleBw + 3 : cx - singleBw / 2
+
           return (
-            <g key={d.h}>
-              <path d={roundTop(cx - bw / 2, y, bw, yFor(0) - y, 4)} fill={VIZ1} opacity={extreme ? 1 : 0.45} />
-              {extreme && (
-                <text x={cx} y={y - 7} textAnchor="middle" fontSize="10.5" fontWeight="600" fill={INK_HI} fontFamily="IBM Plex Mono, monospace">
+            <g
+              key={d.h || i}
+              className="cursor-pointer transition-opacity"
+              onClick={() => onSelectHour && onSelectHour(isSelected ? null : (d.hour != null ? d.hour : d.h))}
+            >
+              {/* 선택된 시간대 배경 하이라이트 */}
+              {isSelected && (
+                <rect
+                  x={cx - slot / 2 + 2}
+                  y={padT - 4}
+                  width={slot - 4}
+                  height={ih + 6}
+                  fill="rgba(42, 162, 116, 0.12)"
+                  stroke="rgba(42, 162, 116, 0.4)"
+                  strokeWidth="1"
+                  rx="6"
+                />
+              )}
+
+              {/* 어제 막대 (VIZ2 블루) */}
+              {hasYesterday && yYesterday != null && (
+                <path
+                  d={roundTop(xYesterday, yYesterday, singleBw, yFor(0) - yYesterday, 3)}
+                  fill={VIZ2}
+                  opacity={isSelected ? 0.9 : 0.45}
+                />
+              )}
+
+              {/* 오늘 막대 (VIZ1 제이드 그린) */}
+              <path
+                d={roundTop(xToday, yToday, singleBw, yFor(0) - yToday, 3)}
+                fill={VIZ1}
+                opacity={isSelected ? 1 : 0.85}
+              />
+
+              {/* 오늘 수치 라벨 */}
+              {isSelected && (
+                <text
+                  x={hasYesterday ? xToday + singleBw / 2 : cx}
+                  y={yToday - 7}
+                  textAnchor="middle"
+                  fontSize="10"
+                  fontWeight="600"
+                  fill={INK_HI}
+                  fontFamily="IBM Plex Mono, monospace"
+                >
                   {d.rate}%
                 </text>
               )}
-              <text x={cx} y={H - 8} textAnchor="middle" fontSize="9" fill={AXIS_TEXT} fontFamily="IBM Plex Mono, monospace">
+
+              {/* x축 시간 라벨 */}
+              <text
+                x={cx}
+                y={H - 8}
+                textAnchor="middle"
+                fontSize="9"
+                fontWeight={isSelected ? '600' : '400'}
+                fill={isSelected ? INK_HI : AXIS_TEXT}
+                fontFamily="IBM Plex Mono, monospace"
+              >
                 {d.h}
               </text>
+
+              {/* 마우스 호버 및 클릭 인터랙션 영역 */}
               <rect
                 x={padL + slot * i}
                 y={padT}
                 width={slot}
                 height={ih}
                 fill="transparent"
-                onMouseMove={(e) => show(e, { title: d.h, rows: [{ name: '평균 유지율', value: `${d.rate}%`, color: VIZ1 }] })}
+                onMouseMove={(e) => {
+                  const rows = [{ name: '오늘 유지율', value: `${d.rate}%`, color: VIZ1 }]
+                  if (yData) {
+                    rows.push({ name: '어제 유지율', value: `${yData.rate}%`, color: VIZ2 })
+                    rows.push({
+                      name: '전일 대비',
+                      value: delta > 0 ? `+${delta}% (개선)` : delta < 0 ? `${delta}% (저하)` : '동일',
+                    })
+                  }
+                  if (d.alerts != null) {
+                    rows.push({ name: '경고 알림', value: `${d.alerts}회` })
+                  }
+                  show(e, {
+                    title: `${d.h} (클릭 시 원인 분석)`,
+                    rows,
+                  })
+                }}
                 onMouseLeave={hide}
               />
             </g>

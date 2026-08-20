@@ -83,6 +83,7 @@ function DayReport({ date, dayData, onBack }) {
   const [dailyDetail, setDailyDetail] = useState(null)
   const [loading, setLoading] = useState(true)
   const [analyzing, setAnalyzing] = useState(false)
+  const [selectedHour, setSelectedHour] = useState(null)
 
   const fetchDailyDetail = () => {
     if (!getAccessToken()) {
@@ -93,6 +94,7 @@ function DayReport({ date, dayData, onBack }) {
     const year = new Date().getFullYear()
     const formattedDate = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
 
+    setSelectedHour(null)
     api.getDailyReport(formattedDate)
       .then((res) => {
         setDailyDetail(res)
@@ -136,7 +138,13 @@ function DayReport({ date, dayData, onBack }) {
 
   // 시간대별 실측 통계
   const hourlyList = dailyDetail?.hourlyStats && dailyDetail.hourlyStats.length > 0 ? dailyDetail.hourlyStats : []
+  const yesterdayHourlyList = dailyDetail?.yesterdayHourlyStats && dailyDetail.yesterdayHourlyStats.length > 0 ? dailyDetail.yesterdayHourlyStats : []
   const issueStats = dailyDetail?.issueStats || []
+
+  // 선택된 시간대별 원인 분석 또는 하루 전체 분석
+  const selectedHourItem = selectedHour != null ? hourlyList.find((h) => h.hour === selectedHour || h.h === selectedHour) : null
+  const displayIssues = selectedHourItem ? (selectedHourItem.issueStats || []) : issueStats
+
   const aiComment = dailyDetail?.llmSummary || dailyDetail?.llmCommentary
   const highlights = dailyDetail?.llmHighlights || []
   const adviceList = dailyDetail?.llmAdvice || []
@@ -209,9 +217,26 @@ function DayReport({ date, dayData, onBack }) {
           <div className="grid grid-cols-12 gap-4">
             {/* 시간대별 유지율 차트 (좌측 7컬럼) */}
             <div className="col-span-12 lg:col-span-7">
-              <ChartCard className="rise d4 h-full" title="시간대별 유지율" sub={`${date} · 실측 시간대별 유지율`}>
+              <ChartCard
+                className="rise d4 h-full"
+                title="시간대별 유지율"
+                sub={`${date} · 시간대 클릭 시 원인 분석`}
+                legend={
+                  yesterdayHourlyList.length > 0
+                    ? [
+                        { name: '오늘', color: '#2aa274' },
+                        { name: '어제', color: '#5e87c9' },
+                      ]
+                    : undefined
+                }
+              >
                 {hourlyList.length > 0 ? (
-                  <HourlyChart data={hourlyList} />
+                  <HourlyChart
+                    data={hourlyList}
+                    yesterdayData={yesterdayHourlyList}
+                    selectedHour={selectedHour}
+                    onSelectHour={setSelectedHour}
+                  />
                 ) : (
                   <div className="py-12 text-center text-xs text-dim">
                     해당 일자에는 시간대별 측정 데이터가 없습니다.
@@ -224,16 +249,30 @@ function DayReport({ date, dayData, onBack }) {
             <div className="col-span-12 lg:col-span-5">
               <Card className="rise d4 h-full p-6 flex flex-col">
                 <div className="flex items-center justify-between">
-                  <MicroLabel>경고 알림 원인 분석</MicroLabel>
+                  <div className="flex items-center gap-2">
+                    <MicroLabel>
+                      {selectedHourItem ? `${selectedHourItem.h} 원인 분석` : '경고 알림 원인 분석'}
+                    </MicroLabel>
+                    {selectedHourItem && (
+                      <button
+                        onClick={() => setSelectedHour(null)}
+                        className="cursor-pointer text-[10px] text-good hover:underline"
+                      >
+                        (전체 하루 보기)
+                      </button>
+                    )}
+                  </div>
                   <Icon name="bell" size={14} className="text-warn1" />
                 </div>
                 
-                {issueStats.length > 0 ? (
+                {displayIssues.length > 0 ? (
                   <div className="mt-4 space-y-3.5 flex-1">
                     <p className="text-xs text-dim">
-                      오늘 주로 감지된 나쁜 자세 유형과 교정 스트레칭입니다.
+                      {selectedHourItem
+                        ? `${selectedHourItem.h} 동안 감지된 나쁜 자세 유형과 맞춤 스트레칭입니다.`
+                        : '오늘 주로 감지된 나쁜 자세 유형과 교정 스트레칭입니다.'}
                     </p>
-                    {issueStats.map((item, idx) => (
+                    {displayIssues.map((item, idx) => (
                       <div key={item.code} className="rounded-xl border border-line bg-surface/50 p-3">
                         <div className="flex items-center justify-between text-xs mb-1.5">
                           <span className="font-semibold text-hi flex items-center gap-1.5">
@@ -268,7 +307,9 @@ function DayReport({ date, dayData, onBack }) {
                 ) : (
                   <div className="my-auto py-10 text-center text-xs text-dim">
                     <Icon name="target" size={24} className="mx-auto text-good/40 mb-2" />
-                    <p className="text-hi font-medium">특이 경고 없음</p>
+                    <p className="text-hi font-medium">
+                      {selectedHourItem ? `${selectedHourItem.h} 특이 경고 없음` : '특이 경고 없음'}
+                    </p>
                     <p className="mt-1">바른 자세를 모범적으로 잘 유지하셨습니다!</p>
                   </div>
                 )}
