@@ -123,6 +123,53 @@
 @keyframes ga-shrug { 0%, 100% { transform: translateY(0); } 40%, 60% { transform: translateY(-11px); } }
 @keyframes ga-tilt-side { 0%, 100% { transform: translate(0, 0) rotate(0deg); } 40%, 60% { transform: translate(0, 4px) rotate(-8deg); } }
 
+/* 목 옆 늘리기 — 팔꿈치를 머리보다 높이 들어 팔을 머리 위로 넘긴다. */
+@keyframes neck-arm-left {
+  0%, 100% { d: path("M 80 62 C 76 70 72 79 73 86 C 74 94 72 102 70 108"); }
+  40%, 60% { d: path("M 80 62 C 74 45 72 29 86 20 C 99 15 115 18 126 24"); }
+}
+@keyframes neck-arm-right {
+  0%, 100% { d: path("M 140 62 C 146 70 148 79 147 86 C 146 94 148 102 150 108"); }
+  40%, 60% { d: path("M 140 62 C 146 45 148 29 134 20 C 121 15 105 18 94 24"); }
+}
+@keyframes neck-arm-side {
+  0%, 100% { d: path("M 112 66 C 118 76 122 85 122 92 C 124 101 127 108 128 112"); }
+  40%, 60% { d: path("M 112 66 C 120 50 128 31 129 25 C 129 22 126 20 123 20"); }
+}
+@keyframes neck-hand-left {
+  0%, 100% { transform: translate(0, 0); }
+  40%, 60% { transform: translate(56px, -84px); }
+}
+@keyframes neck-hand-right {
+  0%, 100% { transform: translate(0, 0); }
+  40%, 60% { transform: translate(-56px, -84px); }
+}
+@keyframes neck-hand-side {
+  0%, 100% { transform: translate(0, 0); }
+  40%, 60% { transform: translate(-5px, -92px); }
+}
+.neck-arm-left,
+.neck-arm-right,
+.neck-arm-side {
+  animation-duration: 3s;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+.neck-arm-left { animation-name: neck-arm-left; }
+.neck-arm-right { animation-name: neck-arm-right; }
+.neck-arm-side { animation-name: neck-arm-side; }
+.neck-hand-left,
+.neck-hand-right,
+.neck-hand-side {
+  animation-duration: 3s;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  transform-box: view-box;
+}
+.neck-hand-left { animation-name: neck-hand-left; }
+.neck-hand-right { animation-name: neck-hand-right; }
+.neck-hand-side { animation-name: neck-hand-side; }
+
 /* 팔 위로 뻗기 — 아래로 내려온 팔을 귀 옆까지 곧게 들어 올린다. */
 @keyframes arms-up-left {
   0%, 100% { d: path("M 80 62 L 70 84 L 67 108"); }
