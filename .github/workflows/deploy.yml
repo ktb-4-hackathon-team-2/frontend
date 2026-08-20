@@ -1,10 +1,12 @@
-name: Deploy Frontend to S3 and CloudFront
+name: Deploy Frontend to S3 and CloudFront (Manual)
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      reason:
+        description: '배포 사유 (예: v1.0.0 릴리즈)'
+        required: false
+        default: 'Manual deployment triggered via GitHub UI'
 
 jobs:
   deploy:
