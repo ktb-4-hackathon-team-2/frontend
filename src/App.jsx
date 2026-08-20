@@ -14,6 +14,7 @@ import Monitor from './screens/Monitor'
 import Report from './screens/Report'
 import Stretch from './screens/Stretch'
 import Environment from './screens/Environment'
+import PostureGuide from './screens/PostureGuide'
 import AlertsDemo from './screens/AlertsDemo'
 import Settings from './screens/Settings'
 import Summary from './screens/Summary'
@@ -23,6 +24,7 @@ const SCREENS = {
   report: Report,
   stretch: Stretch,
   environment: Environment,
+  posture: PostureGuide,
   alerts: AlertsDemo,
   settings: Settings,
   summary: Summary,
@@ -93,6 +95,7 @@ const TITLES = {
   '/report': '리포트',
   '/stretch': '스트레칭',
   '/environment': '환경 가이드',
+  '/posture': '바른 자세란?',
   '/alerts': '알림 단계',
   '/settings': '설정',
   '/summary': '모니터링 요약',
