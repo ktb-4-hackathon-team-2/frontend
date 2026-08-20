@@ -98,25 +98,6 @@ export default function Summary() {
         </div>
       </Card>
 
-      {/* AI 코멘트 — 추후 리포트 분석이 채우는 자리 */}
-      <Card className="rise d2 mt-4 p-6">
-        <div className="flex items-center justify-between">
-          <MicroLabel>AI 코멘트</MicroLabel>
-          <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-dim">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warn1" />
-            분석 대기 중
-          </span>
-        </div>
-        <div className="mt-4 flex animate-pulse flex-col gap-2.5" aria-hidden>
-          <div className="h-3 w-11/12 rounded bg-white/[0.06]" />
-          <div className="h-3 w-4/5 rounded bg-white/[0.06]" />
-          <div className="h-3 w-3/5 rounded bg-white/[0.06]" />
-        </div>
-        <p className="mt-4 text-xs leading-relaxed text-dim">
-          AI가 오늘 기록을 분석해 코멘트를 준비하고 있어요 — 서버 연동 후 이 자리가 채워집니다.
-        </p>
-      </Card>
-
       <div className="rise d3 mt-6 flex justify-center gap-3">
         <Btn kind="primary" onClick={restart}>
           <Icon name="video" size={15} />
