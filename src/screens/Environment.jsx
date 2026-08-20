@@ -10,10 +10,6 @@ function DynamicDeskDiagram({ data }) {
   // 시선 점선 y 좌표 (음수 각도일수록 화면 아래쪽으로 내려감)
   const gazeTargetY = Math.min(108, Math.max(55, 68 - gazeAngle * 1.8))
 
-  const isDistOk = data?.distanceStatus === 'ok'
-  const distColor = isDistOk ? '#3ec98f' : '#e6b345'
-  const distCm = data?.distanceCm || 65
-
   const isGazeOk = data?.gazeStatus === 'ok'
   const gazeColor = isGazeOk ? '#3ec98f' : '#e6b345'
 
@@ -49,16 +45,6 @@ function DynamicDeskDiagram({ data }) {
       <line x1={headX + 12} y1="68" x2="396" y2={gazeTargetY} stroke={gazeColor} strokeWidth="1.3" strokeDasharray="5 4" />
       <text x="300" y="60" textAnchor="middle" fontSize="10" fill={gazeColor} fontFamily="IBM Plex Mono, monospace">
         시선 {gazeAngle > 0 ? '+' : ''}{gazeAngle}°
-      </text>
-
-      {/* 화면 거리 측정선 & 화살표 */}
-      <g stroke={distColor} strokeWidth="1.2">
-        <line x1="192" y1="168" x2="394" y2="168" />
-        <path d="M198 164 L192 168 L198 172" fill="none" />
-        <path d="M388 164 L394 168 L388 172" fill="none" />
-      </g>
-      <text x="293" y="161" textAnchor="middle" fontSize="10" fill={distColor} fontFamily="IBM Plex Mono, monospace">
-        {distCm}cm · 권장 60–70cm
       </text>
 
       {/* 모니터 거치대 권장 높이 */}
@@ -106,7 +92,7 @@ export default function Environment() {
         <DynamicDeskDiagram data={envData} />
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {envData.checks.map((c, i) => (
           <Card key={c.id} className={`rise d${i + 2} flex flex-col p-6 ${c.ok ? '' : 'border-warn1/25'}`}>
             <div className="flex items-start justify-between gap-3">

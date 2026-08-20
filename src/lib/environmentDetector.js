@@ -26,14 +26,6 @@ export function analyzeEnvironment(calibration) {
       needsFixCount: 0,
       checks: [
         {
-          id: 'distance',
-          name: '화면 거리',
-          ok: true,
-          value: '약 65cm (적정)',
-          finding: '노트북과 이상적인 인체공학 거리(60–70cm)를 유지하고 있어 머리가 앞으로 쏠리지 않아요.',
-          fix: '팔을 뻗었을 때 손끝이 화면에 가볍게 닿는 지금 거리를 유지해 주세요.',
-        },
-        {
           id: 'camera',
           name: '노트북 배치',
           ok: true,
@@ -100,26 +92,8 @@ export function analyzeEnvironment(calibration) {
   // 거북목 머리 오프셋 (모식도 렌더링용)
   const headXOffset = isClose ? 14 : gazeStatus === 'low' ? 10 : 0
 
-  // ── 3가지 핵심 진단 카드 생성 ──────────────────────────────────────────
+  // ── 2가지 핵심 진단 카드 생성 ──────────────────────────────────────────
   const checks = [
-    {
-      id: 'distance',
-      name: '화면 거리',
-      ok: distanceStatus === 'ok',
-      value: `약 ${approxDistCm}cm · ${distanceStatus === 'close' ? '화면 밀착 주의' : distanceStatus === 'far' ? '다소 멈' : '적정'}`,
-      finding:
-        distanceStatus === 'close'
-          ? '화면이 얼굴과 너무 가까워 머리가 앞으로 먼저 마중 나가는 원인이 되고 있어요.'
-          : distanceStatus === 'far'
-            ? '화면이 다소 멀어 글씨를 보려고 고개를 내밀게 될 수 있어요.'
-            : '권장 거리(60–70cm)를 안정적으로 유지하고 있어 눈과 목에 부담이 적어요.',
-      fix:
-        distanceStatus === 'close'
-          ? '의자를 반 뼘 뒤로 밀어주세요. 팔을 뻗어 손끝이 노트북 화면에 닿을락 말락 한 거리가 적당해요.'
-          : distanceStatus === 'far'
-            ? '화면을 한 뼘 앞으로 당기거나 브라우저 폰트 배율을 조금 키워주세요.'
-            : '손끝이 화면에 닿는 지금 거리를 계속 유지해 주세요.',
-    },
     {
       id: 'camera',
       name: '노트북 배치',
