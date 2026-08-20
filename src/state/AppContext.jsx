@@ -76,8 +76,34 @@ export function AppProvider({ children }) {
     } catch {}
   }, [])
 
-  const [calibrated, setCalibrated] = useState(false)
-  const [calibration, setCalibration] = useState(null) // { landmarks, at, view }
+  // 기준 자세는 localStorage 에 보존 — 새로고침해도 온보딩으로 돌아가지 않는다
+  const CALIBRATION_KEY = 'bandeut.calibration'
+  const [calibration, setCalibrationRaw] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(CALIBRATION_KEY))
+      return saved?.landmarks?.length ? saved : null
+    } catch {
+      return null
+    }
+  }) // { landmarks, at, view }
+  const [calibrated, setCalibratedRaw] = useState(() => calibration != null)
+  const setCalibration = useCallback((c) => {
+    setCalibrationRaw(c)
+    try {
+      if (c) localStorage.setItem(CALIBRATION_KEY, JSON.stringify(c))
+      else localStorage.removeItem(CALIBRATION_KEY)
+    } catch {} // 저장 실패해도 세션 동안은 state 로 동작
+  }, [])
+  // 재촬영(false) 시에는 저장분도 지워서, 재캘리브레이션 중 새로고침하면 온보딩에 머문다
+  const setCalibrated = useCallback((v) => {
+    setCalibratedRaw(v)
+    if (!v) {
+      setCalibrationRaw(null)
+      try {
+        localStorage.removeItem(CALIBRATION_KEY)
+      } catch {}
+    }
+  }, [])
   const [posture, setPosture] = useState('good')
   const [paused, setPausedRaw] = useState(false)
   // 자리 비움 자동 일시정지 상태 — 전용 전체화면 안내를 띄운다
@@ -100,6 +126,13 @@ export function AppProvider({ children }) {
   const [tick, setTick] = useState(0)
   const [localDetection, setLocalDetection] = useState({ status: 'idle', score: null, reason: null })
   const camera = useCamera()
+
+  // 새로고침 복원 — 저장된 기준 자세로 시작하는 세션이면 카메라를 자동 시작해 모니터링을 이어간다.
+  // (권한은 온보딩에서 이미 허용된 상태라 보통 프롬프트 없이 켜진다. 거부돼 있으면 idle 카드로 남는다)
+  useEffect(() => {
+    if (calibrated && camera.status === 'idle') camera.start()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // 감지 전용 히든 비디오 — 화면에 카메라 뷰가 없어도(리포트·설정·위젯 모드)
   // 프레임을 계속 공급해서 어디서든 측정이 이어지게 한다.

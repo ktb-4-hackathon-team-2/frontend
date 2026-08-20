@@ -118,7 +118,9 @@ export function FloatingWidgetPortal() {
       : meta.score
 
   return createPortal(
-    <div className={`flex h-screen w-screen items-center gap-3 border-t-2 bg-ink px-4 ${tone.border}`}>
+    <div className={`relative flex h-screen w-screen items-center gap-3 border-t-2 bg-ink px-4 ${tone.border}`}>
+      {/* 브랜드 라벨 — PiP 타이틀바의 도메인 표기는 브라우저 보안 UI라 못 바꾸므로 콘텐츠 안에 표기 */}
+      <span className="absolute right-3 top-2 text-[11px] font-bold tracking-tight text-mid">반듯</span>
       <PostureFigure state={paused ? 'good' : posture} className={`h-16 w-16 shrink-0 ${tone.text}`} stroke={5} />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
