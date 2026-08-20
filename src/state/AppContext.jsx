@@ -28,6 +28,15 @@ export const SCREEN_PATHS = {
   summary: '/summary', // 모니터링 종료 후 세션 요약 (사이드바에는 없음)
 }
 const PATH_TO_SCREEN = Object.fromEntries(Object.entries(SCREEN_PATHS).map(([s, p]) => [p, s]))
+const THEME_KEY = 'bandeut_theme'
+
+function getInitialTheme() {
+  try {
+    return localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark'
+  } catch {
+    return 'dark'
+  }
+}
 
 // rAF가 아니라 setInterval: 탭이 비활성화돼도 감지 루프는 계속 돌아야 한다.
 // 2초 1틱 — 1분 집계(30샘플) 전송과 짝을 맞춘 주기. 모니터 화면의 스켈레톤은
@@ -67,6 +76,18 @@ export function AppProvider({ children }) {
     },
     [navigate],
   )
+
+  const [theme, setTheme] = useState(getInitialTheme)
+  const toggleTheme = useCallback(() => {
+    setTheme((current) => (current === 'dark' ? 'light' : 'dark'))
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    try {
+      localStorage.setItem(THEME_KEY, theme)
+    } catch {}
+  }, [theme])
 
   const [cameraView, setCameraViewState] = useState(() => localStorage.getItem('bandeut_camera_view') || 'front')
   const setCameraView = useCallback((v) => {
@@ -534,6 +555,7 @@ export function AppProvider({ children }) {
     paused, setPaused,
     awayPaused, clearAwayPaused: () => setAwayPaused(false),
     widgetMode, setWidgetMode,
+    theme, toggleTheme,
     settings, setSettings, updateSetting,
     alertCount, elapsedSec, stretchLeft, stretchSuggest, setStretchSuggest,
     postponeStretch, startStretchNow, adjustStretch, resetSession, endMonitoring, sessionSummary,

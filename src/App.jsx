@@ -29,8 +29,17 @@ const SCREENS = {
 }
 
 function Topbar() {
-  const { meta, paused, posture, localDetection, pipWindow, openFloatingWidget, closeFloatingWidget } =
-    useApp()
+  const {
+    meta,
+    paused,
+    posture,
+    localDetection,
+    pipWindow,
+    openFloatingWidget,
+    closeFloatingWidget,
+    theme,
+    toggleTheme,
+  } = useApp()
   const tracking = localDetection.status === 'tracking'
   const score = tracking && localDetection.displayScore != null ? localDetection.displayScore : meta.score
   return (
@@ -56,6 +65,10 @@ function Topbar() {
           {pipWindow ? '플로팅 위젯 닫기' : '플로팅 위젯'}
         </Btn>
       )}
+      <Btn size="sm" kind="ghost" onClick={toggleTheme} title="화면 테마 전환">
+        <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={13} />
+        {theme === 'dark' ? '라이트모드' : '다크모드'}
+      </Btn>
     </header>
   )
 }

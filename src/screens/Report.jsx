@@ -38,7 +38,7 @@ const rateTone = (v) => (v >= 80 ? TONE.good : v >= 65 ? TONE.warn1 : TONE.warn2
 // 주 내 유지율 순위별 제이드 진하기 — 그 주에서 1등이 가장 진하고 꼴등이 가장 연하다.
 const ALPHA_MAX = 0.4
 const ALPHA_MIN = 0.05
-const JADE = (a) => `rgba(62, 201, 143, ${a})`
+const JADE = (a) => `rgb(var(--chart-viz1-rgb) / ${a})`
 
 function DayCell({ date, data, onSelect, alpha }) {
   const future = isFuture(date)
@@ -151,7 +151,7 @@ function DayReport({ date, dayData, onBack }) {
   const grade = dailyDetail?.grade
 
   return (
-    <div>
+    <div className="report-page">
       <div className="rise mb-6 flex items-end justify-between gap-4">
         <div>
           <Btn size="sm" kind="outline" onClick={onBack}>
@@ -224,8 +224,8 @@ function DayReport({ date, dayData, onBack }) {
                 legend={
                   yesterdayHourlyList.length > 0
                     ? [
-                        { name: '오늘', color: '#2aa274' },
-                        { name: '어제', color: '#5e87c9' },
+                        { name: '오늘', color: 'var(--chart-viz1)' },
+                        { name: '어제', color: 'var(--chart-viz2)' },
                       ]
                     : undefined
                 }
@@ -459,7 +459,7 @@ export default function Report() {
   }
 
   return (
-    <div>
+    <div className="report-page">
       <ScreenHeader title="자세 리포트" desc="주 단위 실측 기록이에요 — 날짜를 누르면 그날의 상세 리포트로 들어갑니다." />
 
       {/* 주간 날짜 카드 */}

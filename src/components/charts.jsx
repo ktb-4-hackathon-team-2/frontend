@@ -1,14 +1,17 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { Card, MicroLabel } from './ui'
 
-// 차트 팔레트 — dataviz validate_palette.js 통과 조합 (surface #121517 기준)
-const VIZ1 = '#2aa274' // 이번 주 / 주 계열
-const VIZ2 = '#5e87c9' // 지난주 (비교 계열)
-const GRID = 'rgba(255,255,255,0.06)'
-const BASE = 'rgba(255,255,255,0.16)'
-const AXIS_TEXT = '#6b746e'
-const INK_HI = '#e9edeb'
-const SURFACE = '#121517'
+// 차트 팔레트 — 다크모드는 main 팔레트, 라이트모드는 흰 배경용 대비 보정
+const VIZ1 = 'var(--chart-viz1)' // 이번 주 / 주 계열
+const VIZ2 = 'var(--chart-viz2)' // 지난주 (비교 계열)
+const GRID = 'var(--chart-grid)'
+const BASE = 'var(--chart-base)'
+const AXIS_TEXT = 'var(--chart-axis-text)'
+const INK_HI = 'var(--chart-ink-hi)'
+const SURFACE = 'var(--chart-surface)'
+const VIZ1_SOFT_FILL = 'var(--chart-viz1-soft-fill)'
+const VIZ1_SOFT_STROKE = 'var(--chart-viz1-soft-stroke)'
+const CHART_SPARK = 'var(--chart-spark)'
 
 function roundTop(x, y, w, h, r) {
   const rr = Math.min(r, w / 2, h)
@@ -305,8 +308,8 @@ export function HourlyChart({ data = [], yesterdayData = [], onSelectHour, selec
                   y={padT - 4}
                   width={slot - 4}
                   height={ih + 6}
-                  fill="rgba(42, 162, 116, 0.12)"
-                  stroke="rgba(42, 162, 116, 0.4)"
+                  fill={VIZ1_SOFT_FILL}
+                  stroke={VIZ1_SOFT_STROKE}
                   strokeWidth="1"
                   rx="6"
                 />
@@ -405,7 +408,7 @@ export function Spark({ data, width = 110, height = 30 }) {
   const lastY = yFor(data[data.length - 1])
   return (
     <svg width={width} height={height} className="overflow-visible" aria-hidden>
-      <path d={path} fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d={path} fill="none" stroke={CHART_SPARK} strokeWidth="1.5" strokeLinejoin="round" />
       <path
         d={data.slice(-2).map((v, i) => `${i === 0 ? 'M' : 'L'}${xFor(data.length - 2 + i)},${yFor(v)}`).join(' ')}
         fill="none"

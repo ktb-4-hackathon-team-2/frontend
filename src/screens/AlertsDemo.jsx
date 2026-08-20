@@ -5,24 +5,30 @@ const STAGES = [
   {
     level: 1,
     name: '위젯 신호',
+    icon: 'pip',
     tone: 'text-warn1',
     border: 'border-warn1/30',
+    stageClass: 'stage-card-warn1',
     desc: '구석 위젯의 색과 실루엣만 조용히 바뀝니다. 업무 흐름은 끊지 않아요.',
     hint: '트리거 후 우측 하단 위젯을 보세요',
   },
   {
     level: 2,
     name: '토스트 알림',
+    icon: 'bell',
     tone: 'text-warn2',
     border: 'border-warn2/30',
+    stageClass: 'stage-card-warn2',
     desc: '무너진 자세가 이어지면, 작은 토스트가 무엇이 문제인지 알려줘요.',
     hint: '화면 우측 상단에 나타나요',
   },
   {
     level: 3,
     name: '전체 화면 개입',
+    icon: 'alert',
     tone: 'text-warn3',
     border: 'border-warn3/30',
+    stageClass: 'stage-card-warn3',
     desc: '그래도 안 고쳐지면 화면 전체를 덮습니다. 고치기 전엔 일 못 해요.',
     hint: '설정에서 옵트인해야 실제로 동작',
   },
@@ -38,7 +44,7 @@ function EscalationDiagram() {
   return (
     <Card className="rise d1 mb-4 flex items-center justify-between gap-2 px-8 py-6">
       {nodes.map((n, i) => (
-        <div key={n.label} className="flex flex-1 items-center gap-2">
+        <div key={n.label} className={`stage-node stage-node-${i === 0 ? 'good' : `warn${i}`} flex flex-1 items-center gap-2`}>
           {i > 0 && (
             <div className="flex flex-1 flex-col items-center gap-1 px-1">
               <span className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-dim">{n.after}</span>
@@ -46,7 +52,9 @@ function EscalationDiagram() {
             </div>
           )}
           <div className="flex shrink-0 flex-col items-center gap-1.5">
-            <PostureFigure state={n.state} className={`h-10 w-10 ${n.tone}`} />
+            <div className="stage-node-icon flex h-14 w-14 items-center justify-center rounded-2xl">
+              <PostureFigure state={n.state} className={`h-10 w-10 ${n.tone}`} />
+            </div>
             <span className="whitespace-nowrap text-[11px] text-mid">{n.label}</span>
           </div>
         </div>
@@ -68,8 +76,13 @@ export default function AlertsDemo() {
 
       <div className="grid grid-cols-3 gap-4">
         {STAGES.map((s, i) => (
-          <Card key={s.level} className={`rise d${i + 2} flex flex-col p-6`}>
-            <div className={`font-mono text-[10px] uppercase tracking-[0.22em] ${s.tone}`}>Level 0{s.level}</div>
+          <Card key={s.level} className={`stage-card ${s.stageClass} rise d${i + 2} flex flex-col p-6`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="stage-kicker font-mono text-[10px] uppercase tracking-[0.22em]">Level 0{s.level}</div>
+              <div className="stage-icon flex h-9 w-9 items-center justify-center rounded-xl">
+                <Icon name={s.icon} size={17} />
+              </div>
+            </div>
             <h3 className="mt-2 text-lg font-bold">{s.name}</h3>
             <p className="mt-2 flex-1 text-[13px] leading-relaxed text-mid">{s.desc}</p>
             {s.level === 3 && (
@@ -82,10 +95,10 @@ export default function AlertsDemo() {
                 {settings.maxAlertLevel >= 3 ? '옵트인 완료 — 실사용에서도 동작' : '현재 꺼짐 (기본값) — 데모는 가능'}
               </div>
             )}
-            <Btn kind="outline" className={`mt-4 ${s.border}`} onClick={() => triggerDemo(s.level)}>
+            <Btn kind="outline" className="stage-action mt-4" onClick={() => triggerDemo(s.level)}>
               데모 보기
             </Btn>
-            <p className="mt-2.5 text-center text-[11px] text-dim">{s.hint}</p>
+            <p className="stage-hint mt-2.5 text-center text-[11px] text-dim">{s.hint}</p>
           </Card>
         ))}
       </div>
