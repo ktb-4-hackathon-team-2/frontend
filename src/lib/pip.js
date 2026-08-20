@@ -25,7 +25,7 @@ export function copyStylesTo(pipWindow) {
 }
 
 /** 플로팅 위젯 창 열기 — 사용자 제스처(클릭) 안에서만 호출 가능 */
-export async function openPipWindow({ width = 240, height = 170 } = {}) {
+export async function openPipWindow({ width = 340, height = 210 } = {}) {
   const pipWindow = await window.documentPictureInPicture.requestWindow({ width, height })
   copyStylesTo(pipWindow)
   pipWindow.document.title = '반듯 위젯'

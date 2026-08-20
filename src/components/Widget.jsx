@@ -108,7 +108,7 @@ export function Widget() {
 // 플로팅 위젯 (Document PiP) — 다른 앱 위에 떠 있는 창에 포털로 렌더.
 // 메인 앱과 같은 React 트리라 자세 상태가 실시간으로 반영된다.
 export function FloatingWidgetPortal() {
-  const { pipWindow, posture, meta, paused, warnLevel, localDetection } = useApp()
+  const { pipWindow, posture, meta, paused, setPaused, warnLevel, localDetection } = useApp()
   if (!pipWindow) return null
 
   const tone = paused ? TONE.neutral : TONE[meta.tone]
@@ -139,6 +139,18 @@ export function FloatingWidgetPortal() {
           {paused ? '모니터링이 멈춰 있어요' : (localDetection.reason ?? '조용히 지켜보는 중')}
         </p>
       </div>
+      {/* 일시정지/재개 — 같은 React 트리라 메인 앱의 setPaused 를 그대로 호출 (카메라도 함께 꺼지고 켜진다) */}
+      <button
+        onClick={() => setPaused(!paused)}
+        title={paused ? '모니터링 재개' : '모니터링 일시정지'}
+        className={`flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border transition-colors ${
+          paused
+            ? 'border-good/50 bg-good/10 text-good hover:bg-good/20'
+            : 'border-line-strong bg-raised text-mid hover:text-hi'
+        }`}
+      >
+        <Icon name={paused ? 'play' : 'pause'} size={15} />
+      </button>
     </div>,
     pipWindow.document.body,
   )
