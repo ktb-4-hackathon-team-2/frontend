@@ -410,24 +410,23 @@ export default function Onboarding() {
         {/* 캡처 버튼 영역 */}
         <div className="mt-auto flex flex-col gap-2.5 pt-4">
           {referencePose ? (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-3">
-                <div className="flex h-14 w-20 items-center justify-center rounded-lg border border-good/40 bg-good/10">
-                  <PostureFigure state="good" className="h-8 w-8 text-good" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-1 text-xs text-good font-semibold">
-                    <Icon name="check" size={14} />
-                    기준 자세 캡처 완료
-                  </div>
-                  <span className="text-[10px] text-dim">
-                    {cameraView === 'front' ? '정면 뷰' : cameraView === 'left_diagonal' ? '좌측 대각 뷰' : '우측 대각 뷰'}
-                  </span>
-                </div>
-                <Btn size="sm" kind="ghost" className="ml-auto" onClick={retake}>
-                  다시 찍기
-                </Btn>
+            <div className="flex items-center gap-3 rounded-xl border border-good/30 bg-good/[0.06] p-3">
+              <div className="flex h-14 w-20 shrink-0 items-center justify-center rounded-lg border border-good/40 bg-good/10">
+                <PostureFigure state="good" className="h-8 w-8 text-good" />
               </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1 text-xs font-semibold text-good">
+                  <Icon name="check" size={14} />
+                  기준 자세 캡처 완료
+                </div>
+                <span className="text-[10px] text-dim">
+                  {cameraView === 'front' ? '정면 뷰' : cameraView === 'left_diagonal' ? '좌측 대각 뷰' : '우측 대각 뷰'} · 마음에 안 들면 다시 찍을 수 있어요
+                </span>
+              </div>
+              <Btn kind="outline" className="ml-auto shrink-0 whitespace-nowrap" onClick={retake}>
+                <Icon name="refresh" size={14} />
+                다시 찍기
+              </Btn>
             </div>
           ) : (
             <div className="flex flex-col gap-2 rounded-xl border border-line bg-raised/50 p-3.5">
