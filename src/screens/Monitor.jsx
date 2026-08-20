@@ -131,12 +131,14 @@ export default function Monitor() {
     return () => clearInterval(id)
   }, [])
 
-  // 오늘 유지율 — 서버의 하루 전체 집계(여러 세션 누적) 우선, 없으면 이번 세션 실측
+  // 오늘 유지율 & 알림 횟수 & 모니터링 시간 — 서버의 하루 전체 집계(여러 세션 누적) 우선, 없으면 이번 세션 실측
   const sessionPct = localDetection.sessionRatio != null ? Math.round(localDetection.sessionRatio * 100) : null
   const todayPct = serverToday?.rate ?? sessionPct
   const todaySource = serverToday?.rate != null ? '오늘 전체 · 1분마다 갱신' : '이번 세션 실측'
+  const todayAlertCount = serverToday?.alertCount != null ? serverToday.alertCount : alertCount
+  const todayElapsedSec = serverToday?.totalMin != null ? Math.round(serverToday.totalMin * 60) : elapsedSec
   const rateDelta = todayPct != null && yesterday?.rate != null ? todayPct - yesterday.rate : null
-  const alertDelta = yesterday?.alertCount != null ? alertCount - yesterday.alertCount : null
+  const alertDelta = todayAlertCount != null && yesterday?.alertCount != null ? todayAlertCount - yesterday.alertCount : null
 
   return (
     <div className="grid grid-cols-12 gap-4">
@@ -191,7 +193,7 @@ export default function Monitor() {
         <div className="mt-auto flex items-center gap-3 border-t border-line pt-4">
           <span className="flex items-center gap-1.5 font-mono text-sm text-mid">
             <Icon name="clock" size={14} className="text-dim" />
-            {fmtClock(elapsedSec)}
+            {fmtClock(todayElapsedSec)}
           </span>
           <span className="text-[11px] text-dim">오늘 모니터링</span>
           <div className="flex-1" />
@@ -270,7 +272,7 @@ export default function Monitor() {
         <Card className="rise d4 flex flex-col gap-2 p-5">
           <MicroLabel>알림 횟수</MicroLabel>
           <div className="flex items-baseline gap-1.5">
-            <span className="font-mono text-[28px] font-semibold leading-none">{alertCount}</span>
+            <span className="font-mono text-[28px] font-semibold leading-none">{todayAlertCount}</span>
             <span className="text-sm text-mid">회</span>
           </div>
           {alertDelta != null ? (
@@ -284,7 +286,7 @@ export default function Monitor() {
         </Card>
         <Card className="rise d5 flex flex-col gap-2 p-5">
           <MicroLabel>모니터링 시간</MicroLabel>
-          <div className="font-mono text-[28px] font-semibold leading-none">{fmtDur(elapsedSec)}</div>
+          <div className="font-mono text-[28px] font-semibold leading-none">{fmtDur(todayElapsedSec)}</div>
           <div className="text-xs text-dim">오늘 누적</div>
         </Card>
         <Card className="rise d6 flex flex-col gap-2 p-5">
