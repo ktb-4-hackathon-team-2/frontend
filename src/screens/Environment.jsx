@@ -59,18 +59,24 @@ function DynamicDeskDiagram({ data }) {
   )
 }
 
-export default function Environment() {
-  const { setCalibrated, calibration } = useApp()
+const VIEW_OPTIONS = [
+  { id: 'front', label: '정면' },
+  { id: 'side_right', label: '우측 측면' },
+  { id: 'side_left', label: '좌측 측면' },
+]
 
-  // 캘리브레이션 랜드마크 기반 실시간 환경 진단
-  const envData = useMemo(() => analyzeEnvironment(calibration), [calibration])
+export default function Environment() {
+  const { setCalibrated, calibration, cameraView, setCameraView } = useApp()
+
+  // 캘리브레이션 랜드마크 & 사용자 선택 뷰 기반 실시간 환경 진단
+  const envData = useMemo(() => analyzeEnvironment(calibration, cameraView), [calibration, cameraView])
   const needFix = envData.needsFixCount
 
   return (
     <div>
       <ScreenHeader
         title="환경 가이드"
-        desc="캘리브레이션 프레임의 실측 랜드마크를 분석해 노트북 작업 환경을 진단했어요."
+        desc="캘리브레이션 프레임의 실측 랜드마크와 실제 노트북 배치를 분석해 작업 환경을 진단했어요."
         right={
           <Btn kind="outline" size="sm" onClick={() => setCalibrated(false)}>
             <Icon name="refresh" size={13} />
@@ -102,6 +108,30 @@ export default function Environment() {
               </div>
               <Chip tone={c.ok ? 'good' : 'warn1'}>{c.ok ? '적정' : '조정 필요'}</Chip>
             </div>
+
+            {/* 노트북 배치 카드인 경우: 직접 위치(정면/우측/좌측)를 고를 수 있는 선택 탭 제공 */}
+            {c.id === 'camera' && (
+              <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-white/[0.04] p-1 border border-white/[0.06]">
+                {VIEW_OPTIONS.map((opt) => {
+                  const isSelected = (cameraView || 'front') === opt.id
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setCameraView(opt.id)}
+                      className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors ${
+                        isSelected
+                          ? 'bg-white/15 text-white font-bold shadow-sm'
+                          : 'text-dim hover:text-white/80 hover:bg-white/[0.03]'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
             <p className="mt-3 flex-1 text-[13px] leading-relaxed text-mid">{c.finding}</p>
             <div
               className={`mt-4 flex items-start gap-2.5 rounded-lg p-3 text-xs leading-relaxed ${
