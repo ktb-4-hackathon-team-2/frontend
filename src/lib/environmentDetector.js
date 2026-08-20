@@ -1,6 +1,6 @@
 /**
  * 노트북 웹캠 랜드마크 & 사용자 선택 기반 실시간 환경 진단 엔진.
- * 1) 노트북 배치 (정면 / 우측 측면 / 좌측 측면)
+ * 1) 노트북 배치 (정면 / 우측 측면 / 좌측 측면 ➔ 모두 정상적인 작업 셋업으로 인정)
  * 2) 화면 및 시선 높이 (고개 숙임 / 적정 / 거치대 권장)
  * 를 인체공학적 상태 기반으로 정밀하게 판정합니다.
  */
@@ -87,24 +87,26 @@ export function analyzeEnvironment(calibration, overrideView = null) {
     {
       id: 'camera',
       name: '노트북 배치',
-      ok: laptopSetup === 'front',
+      ok: true, // 정면/측면 듀얼 모두 정상적인 데스크 셋업으로 인정 (적정 🟢)
+      statusText: laptopSetup === 'front' ? '적정' : '적정 (측면 셋업)',
       value: laptopText,
       setupKey: laptopSetup,
       finding:
         laptopSetup === 'side_right'
-          ? '노트북 웹캠이 우측에 위치해 있어 시선이 측면을 향하고 있어요.'
+          ? '노트북을 오른쪽에 둔 듀얼 모니터 환경이에요. 반듯 AI가 측면 앵글을 감안해 자세를 정밀하게 분석합니다.'
           : laptopSetup === 'side_left'
-            ? '노트북 웹캠이 좌측에 위치해 있어 시선이 측면을 향하고 있어요.'
+            ? '노트북을 왼쪽에 둔 듀얼 모니터 환경이에요. 반듯 AI가 측면 앵글을 감안해 자세를 정밀하게 분석합니다.'
             : '노트북이 몸통 정면에 위치해 좌우 목 근육의 긴장도가 균형 잡혀 있어요.',
       fix:
         laptopSetup !== 'front'
-          ? '목이 한쪽으로 비틀리지 않도록 주로 보시는 메인 모니터 정면에 의자와 몸통을 정렬해 주세요.'
+          ? '목이 한쪽으로만 오래 비틀리지 않도록 주로 보시는 메인 모니터 정면에 의자와 몸통을 정렬해 주세요.'
           : '노트북이 몸통 중앙을 마주보는 상태를 유지해 주세요.',
     },
     {
       id: 'monitor',
       name: '화면 · 시선 높이',
       ok: gazeStatus === 'ok',
+      statusText: gazeStatus === 'ok' ? '적정' : '조정 필요',
       value: `시선 ${gazeAngle > 0 ? '+' : ''}${gazeAngle}° · ${gazeStatus === 'low' ? '고개 숙임' : gazeStatus === 'high' ? '시선 높음' : '안정'}`,
       finding:
         gazeStatus === 'low'
@@ -121,6 +123,7 @@ export function analyzeEnvironment(calibration, overrideView = null) {
     },
   ]
 
+  // 실제 물리적 교정이 필요한 항목(모니터 높이 등)만 조정 필요 카운트에 반영
   const needsFixCount = checks.filter((c) => !c.ok).length
 
   return {

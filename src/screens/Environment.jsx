@@ -106,7 +106,7 @@ export default function Environment() {
                 <h3 className="text-base font-bold">{c.name}</h3>
                 <div className="mt-1 font-mono text-xs text-mid">{c.value}</div>
               </div>
-              <Chip tone={c.ok ? 'good' : 'warn1'}>{c.ok ? '적정' : '조정 필요'}</Chip>
+              <Chip tone={c.ok ? 'good' : 'warn1'}>{c.statusText || (c.ok ? '적정' : '조정 필요')}</Chip>
             </div>
 
             {/* 노트북 배치 카드인 경우: 직접 위치(정면/우측/좌측)를 고를 수 있는 선택 탭 제공 */}
