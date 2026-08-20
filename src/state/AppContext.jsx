@@ -36,6 +36,8 @@ export const DETECT_INTERVAL_MS = 2000
 const SMOOTH_ALPHA = 0.6
 // 나쁜 자세가 이 시간 이상 이어져야 warn1(위젯 신호)을 띄운다 — 순간 떨림으로 인한 깜빡임 방지
 const WARN1_AFTER_SEC = 1.5
+// 자리 비움이 이 시간 이상 이어지면 자동 일시정지 (카메라 끄기 + 전용 안내)
+const ABSENCE_PAUSE_SEC = 5
 
 export const WARN_LEVEL = { good: 0, warn1: 1, warn2: 2, warn3: 3 }
 
@@ -45,8 +47,9 @@ export const useApp = () => useContext(Ctx)
 export function AppProvider({ children }) {
   const { path, navigate } = useRouter()
 
-  // screen/widgetMode 는 URL에서 파생 — setScreen/setWidgetMode 는 내비게이션이다
-  const screenFromPath = PATH_TO_SCREEN[path]
+  // screen/widgetMode 는 URL에서 파생 — setScreen/setWidgetMode 는 내비게이션이다.
+  // '/stretch/<동작id>' 같은 서브 경로는 스트레칭 화면으로 매핑된다.
+  const screenFromPath = PATH_TO_SCREEN[path] ?? (path.startsWith('/stretch/') ? 'stretch' : undefined)
   const lastScreenRef = useRef('monitor')
   useEffect(() => {
     if (screenFromPath) lastScreenRef.current = screenFromPath
@@ -73,7 +76,9 @@ export function AppProvider({ children }) {
   const [calibrated, setCalibrated] = useState(false)
   const [calibration, setCalibration] = useState(null) // { landmarks, at, view }
   const [posture, setPosture] = useState('good')
-  const [paused, setPaused] = useState(false)
+  const [paused, setPausedRaw] = useState(false)
+  // 자리 비움 자동 일시정지 상태 — 전용 전체화면 안내를 띄운다
+  const [awayPaused, setAwayPaused] = useState(false)
   const [demoAlert, setDemoAlert] = useState(0) // 알림 데모용 강제 단계 (0 = 없음)
   const [settings, setSettings] = useState({
     maxAlertLevel: 2, // 3단계는 옵트인
@@ -120,10 +125,39 @@ export function AppProvider({ children }) {
   // 스트레칭 화면에서는 모니터링을 쉰다 — 스트레칭 동작을 나쁜 자세로 오판하지 않도록
   const monitoringOn = calibrated && screen !== 'stretch' && camera.status === 'active'
   const pose = usePoseLandmarker(monitoringOn)
+
+  // 일시정지 ↔ 카메라 동기화: 일시정지하면 카메라를 끄고, 재개하면 켠다
+  const setPaused = useCallback(
+    (next) => {
+      setPausedRaw(next)
+      if (next) {
+        camera.stop()
+      } else {
+        setAwayPaused(false)
+        if (camera.status !== 'active') camera.start()
+      }
+    },
+    [camera.stop, camera.start, camera.status], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
+  // 반대 방향 동기화: 카메라 버튼/OS로 카메라가 꺼지면 일시정지, 켜지면 재개
+  const prevCamStatus = useRef(camera.status)
+  useEffect(() => {
+    const prev = prevCamStatus.current
+    prevCamStatus.current = camera.status
+    if (!calibrated) return
+    if (prev === 'active' && camera.status === 'idle') setPausedRaw(true)
+    if (prev !== 'active' && camera.status === 'active') {
+      setPausedRaw(false)
+      setAwayPaused(false)
+    }
+  }, [camera.status, calibrated])
   const demoTimer = useRef(null)
   const postureSince = useRef(Date.now())
   // 경고 상태머신 (posture.py AlertTracker 포팅판) — 5초 지속 시 팝업, 15초 지속 시 강한 경고
   const trackerRef = useRef(new AlertTracker())
+  // 자리 비움 시작 시각 — 5초 이상 이어지면 자동 일시정지
+  const absenceSinceRef = useRef(null)
   // 지표 EMA 상태
   const emaRef = useRef(null)
   // 마지막으로 인식된 랜드마크 — 화면 오버레이(스켈레톤)용, 리렌더 없이 ref로 공유
@@ -179,9 +213,10 @@ export function AppProvider({ children }) {
   useEffect(() => {
     const enabled = monitoringOn && !paused
     if (!enabled) {
-      if (camera.status !== 'active') setLocalDetection({ status: 'idle', score: null, reason: null })
+      if (camera.status !== 'active') setLocalDetection((d) => (d.status === 'idle' ? d : { status: 'idle', score: null, reason: d.reason }))
       trackerRef.current = new AlertTracker()
       emaRef.current = null
+      absenceSinceRef.current = null
       return
     }
 
@@ -209,9 +244,21 @@ export function AppProvider({ children }) {
       if (!landmarks || !visibilityOk(landmarks)) {
         // 자리 비움/가림 — 비운 시간은 나쁜 자세 지속시간에서 제외 (note_absence)
         trackerRef.current.noteAbsence(now)
+        // 자리 비움이 5초 이상 이어지면 자동 일시정지: 카메라 끄기 + 전용 안내
+        if (absenceSinceRef.current == null) {
+          absenceSinceRef.current = now
+        } else if (now - absenceSinceRef.current >= ABSENCE_PAUSE_SEC) {
+          absenceSinceRef.current = null
+          setAwayPaused(true)
+          setPausedRaw(true)
+          camera.stop()
+          setLocalDetection({ status: 'idle', score: null, reason: '자리 비움으로 모니터링을 일시정지했어요' })
+          return
+        }
         setLocalDetection((d) => ({ ...d, status: 'lost', reason: '얼굴과 양쪽 어깨를 찾는 중이에요' }))
         return
       }
+      absenceSinceRef.current = null
 
       const raw = computeMetrics(landmarks)
       // 지표 EMA — 프레임 단위 좌표 떨림을 흡수한 뒤 판정에 넘긴다
@@ -387,15 +434,8 @@ export function AppProvider({ children }) {
   }, [settings.stretchMin, setScreen])
 
   // 경고에서 특정 스트레칭 세션으로 바로 진입 (예: 거북목 경고 → 턱 당기기)
-  const [pendingStretchId, setPendingStretchId] = useState(null)
-  const requestStretch = useCallback(
-    (id) => {
-      setPendingStretchId(id)
-      setScreen('stretch')
-    },
-    [setScreen],
-  )
-  const clearPendingStretch = useCallback(() => setPendingStretchId(null), [])
+  // 동작별 URL(/stretch/<id>)로 이동하면 세션이 바로 열린다.
+  const requestStretch = useCallback((id) => navigate(`/stretch/${id}`), [navigate])
 
   const resetSession = useCallback(() => {
     setElapsedSec(0)
@@ -419,11 +459,12 @@ export function AppProvider({ children }) {
     posture, setPosture, meta, warnLevel, effectiveLevel, postureSinceSec,
     demoAlert, triggerDemo, clearDemo, resolvePosture,
     paused, setPaused,
+    awayPaused, clearAwayPaused: () => setAwayPaused(false),
     widgetMode, setWidgetMode,
     settings, setSettings, updateSetting,
     alertCount, elapsedSec, stretchLeft, stretchSuggest, setStretchSuggest,
     postponeStretch, startStretchNow, resetSession, endMonitoring, sessionSummary,
-    pendingStretchId, requestStretch, clearPendingStretch,
+    requestStretch,
     tick, camera, detectionVideoRef, lastLandmarksRef, localDetection, pose,
     cameraView, setCameraView,
     aiBaselineId, saveAiBaselineId,

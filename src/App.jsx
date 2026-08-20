@@ -106,11 +106,15 @@ function Root() {
       if (path !== '/onboarding') navigate('/onboarding', { replace: true })
       return
     }
-    if (!APP_PATHS.includes(path)) navigate('/monitor', { replace: true })
+    if (!APP_PATHS.includes(path) && !path.startsWith('/stretch/')) navigate('/monitor', { replace: true })
   }, [status, keyVerified, calibrated, path, navigate])
 
   useEffect(() => {
-    document.title = TITLES[path] ? `반듯 — ${TITLES[path]}` : '반듯 — 자세 지킴이 프로토타입'
+    document.title = TITLES[path]
+      ? `반듯 — ${TITLES[path]}`
+      : path.startsWith('/stretch/')
+        ? '반듯 — 스트레칭'
+        : '반듯 — 자세 지킴이 프로토타입'
   }, [path])
 
   // 저장된 토큰을 /api/me 로 검증하는 동안의 스플래시

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useApp } from '../state/AppContext'
+import { useRouter } from '../state/RouterContext'
 import { STRETCHES, TARGET_LABEL, REGION_TO_ISSUES, weakestRegion } from '../data/dummy'
 import { CameraView } from '../components/CameraView'
 import { usePoseLandmarker } from '../hooks/usePoseLandmarker'
@@ -379,17 +380,17 @@ function ActiveSession({ stretch, onExit }) {
 }
 
 export default function Stretch() {
-  const { posture, stretchLeft, startStretchNow, localDetection, pendingStretchId, clearPendingStretch } = useApp()
-  const [activeId, setActiveId] = useState(null)
-  const active = STRETCHES.find((s) => s.id === activeId)
+  const { posture, stretchLeft, startStretchNow, localDetection } = useApp()
+  const { path, navigate } = useRouter()
 
-  // 경고 토스트/오버레이에서 특정 동작으로 딥링크된 경우 바로 세션 시작
+  // 동작별 URL 매핑 — /stretch/<id> 면 해당 세션, /stretch 면 목록
+  const activeId = path.startsWith('/stretch/') ? decodeURIComponent(path.slice('/stretch/'.length)) : null
+  const active = activeId ? STRETCHES.find((s) => s.id === activeId) : null
+
+  // 존재하지 않는 동작 id 는 목록으로 교정
   useEffect(() => {
-    if (pendingStretchId) {
-      setActiveId(pendingStretchId)
-      clearPendingStretch()
-    }
-  }, [pendingStretchId, clearPendingStretch])
+    if (activeId && !active) navigate('/stretch', { replace: true })
+  }, [activeId, active, navigate])
 
   // 온디바이스 판정에서 방금 감지된 issue code로, 없으면 취약 부위 매핑으로 추천.
   // AI 서버 recommend와 같은 방식: 겹치는 문제 개수가 많은 순으로 정렬.
@@ -399,7 +400,7 @@ export default function Stretch() {
   const isRecommended = (s) => matchCount(s) > 0
   const sorted = [...STRETCHES].sort((a, b) => matchCount(b) - matchCount(a))
 
-  if (active) return <ActiveSession stretch={active} onExit={() => setActiveId(null)} />
+  if (active) return <ActiveSession key={active.id} stretch={active} onExit={() => navigate('/stretch')} />
 
   return (
     <div>
@@ -444,7 +445,7 @@ export default function Stretch() {
                 size="sm"
                 kind={recommended ? 'primary' : 'outline'}
                 className="mt-3 self-start"
-                onClick={() => setActiveId(s.id)}
+                onClick={() => navigate(`/stretch/${s.id}`)}
               >
                 <Icon name="play" size={13} />
                 시작하기

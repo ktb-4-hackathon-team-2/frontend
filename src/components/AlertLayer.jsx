@@ -11,7 +11,7 @@ export function AlertLayer() {
     effectiveLevel, posture, demoAlert,
     resolvePosture, setScreen, requestStretch,
     stretchSuggest, startStretchNow, postponeStretch,
-    localDetection,
+    localDetection, awayPaused, clearAwayPaused, setPaused,
   } = useApp()
 
   const toastVisible = effectiveLevel === 2
@@ -66,6 +66,36 @@ export function AlertLayer() {
 
       {/* ── 3단계: 전체 화면 개입 ── */}
       {overlayVisible && <FullOverlay onResolve={resolvePosture} rec={rec} onStretch={goStretch} />}
+
+      {/* ── 자리 비움 자동 일시정지 — 경고와 구분되는 차분한 전체 화면 안내 ── */}
+      {awayPaused && !overlayVisible && (
+        <div className="overlay-in fixed inset-0 z-[60] flex items-center justify-center">
+          <div className="absolute inset-0 bg-ink/90 backdrop-blur-xl" />
+          <div className="zoom-in relative flex max-w-md flex-col items-center px-6 text-center">
+            <span className="flex h-16 w-16 items-center justify-center rounded-full border border-line-strong bg-raised">
+              <Icon name="videoOff" size={26} className="text-mid" />
+            </span>
+            <div className="mt-4 font-mono text-[10px] uppercase tracking-[0.22em] text-dim">
+              Away Detected · Auto Paused
+            </div>
+            <h1 className="mt-3 text-3xl font-bold tracking-tight">자리를 비우신 것 같아요</h1>
+            <p className="mt-3 text-sm leading-relaxed text-mid">
+              5초 이상 감지되지 않아 모니터링을 일시정지하고 카메라를 껐어요.
+              <br />
+              돌아오셨다면 이어서 지켜볼게요.
+            </p>
+            <div className="mt-8 flex gap-3">
+              <Btn kind="primary" size="lg" onClick={() => setPaused(false)}>
+                <Icon name="play" size={16} />
+                다시 시작하기
+              </Btn>
+              <Btn kind="ghost" size="lg" onClick={clearAwayPaused}>
+                이대로 두기
+              </Btn>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── 스트레칭 제안 (경고와 구분되는 차분한 톤) ── */}
       {stretchSuggest && !overlayVisible && (
