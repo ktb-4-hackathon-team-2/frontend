@@ -465,13 +465,19 @@ export function AppProvider({ children }) {
     const st = stretchStatsRef.current
     const token = getAccessToken()
     if (token) {
+      // 응답에 AI 분석 결과(llmSummary 등)가 담겨 온다 — 요약 화면의 AI 코멘트 카드에 채운다
       api
         .endMonitoringSession({ stretchSuggested: st.suggested, stretchDone: st.done }, token)
-        .catch((e) => console.warn('모니터링 종료 집계 전송 실패:', e))
+        .then((res) => setSessionSummary((prev) => (prev ? { ...prev, ai: res } : prev)))
+        .catch((e) => {
+          console.warn('모니터링 종료 집계 전송 실패:', e)
+          setSessionSummary((prev) => (prev ? { ...prev, aiFailed: true } : prev))
+        })
     }
     stretchStatsRef.current = { suggested: 0, done: 0 }
     const agg = sessionAggRef.current
     setSessionSummary({
+      aiRequested: Boolean(token), // true면 요약 화면이 AI 코멘트 카드(로딩→결과)를 보여준다
       endedAt: Date.now(),
       monitoredSec: elapsedSec,
       ticks: agg.total,
