@@ -13,6 +13,7 @@ import {
   visibilityOk,
 } from '../lib/postureDetector'
 import { enqueueStats, flushStats } from '../lib/statsReporter'
+import { pipSupported, openPipWindow } from '../lib/pip'
 
 // 화면 ↔ URL 매핑 — screen 상태의 원천은 URL이다
 export const SCREEN_PATHS = {
@@ -449,6 +450,25 @@ export function AppProvider({ children }) {
     setSettings((s) => ({ ...s, [key]: value }))
   }, [])
 
+  // 플로팅 위젯 (Document PiP) — 다른 앱 위에 떠 있는 미니 위젯 창 (Chrome 전용 옵션)
+  const [pipWindow, setPipWindow] = useState(null)
+  const openFloatingWidget = useCallback(async () => {
+    if (!pipSupported) return
+    try {
+      const w = await openPipWindow()
+      w.addEventListener('pagehide', () => setPipWindow(null))
+      setPipWindow(w)
+    } catch {
+      // 사용자 제스처 밖 호출 등 — 조용히 무시
+    }
+  }, [])
+  const closeFloatingWidget = useCallback(() => {
+    setPipWindow((w) => {
+      w?.close()
+      return null
+    })
+  }, [])
+
   const meta = POSTURE_META[posture]
   const postureSinceSec = Math.max(0, Math.floor((Date.now() - postureSince.current) / 1000))
 
@@ -466,6 +486,7 @@ export function AppProvider({ children }) {
     postponeStretch, startStretchNow, resetSession, endMonitoring, sessionSummary,
     requestStretch,
     tick, camera, detectionVideoRef, lastLandmarksRef, localDetection, pose,
+    pipWindow, openFloatingWidget, closeFloatingWidget,
     cameraView, setCameraView,
     aiBaselineId, saveAiBaselineId,
   }

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useApp } from '../state/AppContext'
 import { Btn, Card, Chip, Icon, MicroLabel, PostureFigure, TONE } from './ui'
 import { fmtDur } from '../lib/format'
@@ -101,6 +102,43 @@ export function Widget() {
         )}
       </button>
     </div>
+  )
+}
+
+// 플로팅 위젯 (Document PiP) — 다른 앱 위에 떠 있는 창에 포털로 렌더.
+// 메인 앱과 같은 React 트리라 자세 상태가 실시간으로 반영된다.
+export function FloatingWidgetPortal() {
+  const { pipWindow, posture, meta, paused, warnLevel, localDetection } = useApp()
+  if (!pipWindow) return null
+
+  const tone = paused ? TONE.neutral : TONE[meta.tone]
+  const score =
+    localDetection.status === 'tracking' && localDetection.displayScore != null
+      ? localDetection.displayScore
+      : meta.score
+
+  return createPortal(
+    <div className={`flex h-screen w-screen items-center gap-3 border-t-2 bg-ink px-4 ${tone.border}`}>
+      <PostureFigure state={paused ? 'good' : posture} className={`h-16 w-16 shrink-0 ${tone.text}`} stroke={5} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <span className="font-mono text-3xl font-semibold leading-none text-hi">{paused ? '--' : score}</span>
+          <span className={`text-sm font-medium ${tone.text}`}>{paused ? '일시정지' : meta.label}</span>
+        </div>
+        <div className="mt-1.5 flex gap-0.5">
+          {[1, 2, 3].map((l) => (
+            <span
+              key={l}
+              className={`h-[3px] w-4 rounded-full ${!paused && warnLevel >= l ? tone.bg : 'bg-white/15'}`}
+            />
+          ))}
+        </div>
+        <p className="mt-1.5 truncate text-[11px] text-dim">
+          {paused ? '모니터링이 멈춰 있어요' : (localDetection.reason ?? '조용히 지켜보는 중')}
+        </p>
+      </div>
+    </div>,
+    pipWindow.document.body,
   )
 }
 

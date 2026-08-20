@@ -3,7 +3,8 @@ import { AppProvider, useApp, SCREEN_PATHS } from './state/AppContext'
 import { AuthProvider, useAuth } from './state/AuthContext'
 import { RouterProvider, useRouter } from './state/RouterContext'
 import { Sidebar } from './components/Sidebar'
-import { Widget, WidgetModeBackdrop } from './components/Widget'
+import { Widget, WidgetModeBackdrop, FloatingWidgetPortal } from './components/Widget'
+import { pipSupported } from './lib/pip'
 import { DebugPanel } from './components/DebugPanel'
 import { AlertLayer } from './components/AlertLayer'
 import { Btn, Chip, Icon, MicroLabel, PostureFigure } from './components/ui'
@@ -28,7 +29,8 @@ const SCREENS = {
 }
 
 function Topbar() {
-  const { meta, paused, setWidgetMode, posture, localDetection } = useApp()
+  const { meta, paused, setWidgetMode, posture, localDetection, pipWindow, openFloatingWidget, closeFloatingWidget } =
+    useApp()
   const tracking = localDetection.status === 'tracking'
   const score = tracking && localDetection.displayScore != null ? localDetection.displayScore : meta.score
   return (
@@ -43,6 +45,17 @@ function Topbar() {
       )}
       {!paused && posture === 'good' && <span className="text-xs text-dim">조용히 지켜보는 중</span>}
       <div className="flex-1" />
+      {pipSupported && (
+        <Btn
+          size="sm"
+          kind="ghost"
+          onClick={pipWindow ? closeFloatingWidget : openFloatingWidget}
+          title="다른 앱 위에 떠 있는 미니 위젯 창 (Chrome)"
+        >
+          <Icon name="pip" size={13} />
+          {pipWindow ? '플로팅 위젯 닫기' : '플로팅 위젯'}
+        </Btn>
+      )}
       <Btn size="sm" kind="ghost" onClick={() => setWidgetMode(true)} title="앱을 접고 위젯만 남기기">
         <Icon name="pip" size={13} />
         위젯 모드
@@ -140,6 +153,7 @@ function Root() {
     <div className="app-bg min-h-screen">
       {!calibrated ? <Onboarding /> : widgetMode ? <WidgetModeBackdrop /> : <Shell />}
       {calibrated && <Widget />}
+      <FloatingWidgetPortal />
       <DebugPanel />
       <AlertLayer />
     </div>
