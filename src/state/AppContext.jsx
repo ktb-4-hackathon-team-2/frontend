@@ -23,6 +23,7 @@ export const SCREEN_PATHS = {
   report: '/report',
   stretch: '/stretch',
   environment: '/environment',
+  posture: '/posture',
   alerts: '/alerts',
   settings: '/settings',
   summary: '/summary', // 모니터링 종료 후 세션 요약 (사이드바에는 없음)
