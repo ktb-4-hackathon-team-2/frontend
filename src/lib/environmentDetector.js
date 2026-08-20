@@ -21,11 +21,14 @@ export function analyzeEnvironment(calibration, overrideView = null) {
     const yawOffset = nose.x - earMidX
     yawDeg = Math.round(yawOffset * 220)
 
-    if (!overrideView) {
-      if (yawDeg > 8) {
+    // 사용자가 명시적으로 선택하지 않은 기본 상태일 때만 자동 감지 적용
+    if (!overrideView || overrideView === 'auto') {
+      if (yawDeg > 14) {
         laptopSetup = 'side_right'
-      } else if (yawDeg < -8) {
+      } else if (yawDeg < -14) {
         laptopSetup = 'side_left'
+      } else {
+        laptopSetup = 'front'
       }
     }
   }
@@ -38,8 +41,8 @@ export function analyzeEnvironment(calibration, overrideView = null) {
     laptopText = '정면 정렬'
   }
 
-  // 2. 화면 및 시선 높이 정밀 계산 (복합 생체역학 지표)
-  let gazeAngle = -6
+  // 2. 화면 및 시선 높이 정밀 계산 (자연스러운 인체공학 영점 보정)
+  let gazeAngle = -4
   let gazeStatus = 'ok'
   let headXOffset = 0
 
@@ -50,28 +53,27 @@ export function analyzeEnvironment(calibration, overrideView = null) {
     const leftShoulder = landmarks[11]
     const rightShoulder = landmarks[12]
 
-    // 1) 코-양귀 수직 편차 (고개 숙임 시 귀가 올라가고 코가 내려감)
+    // 1) 코-양귀 수직 편차 (정면 응시 시 ~0.01)
     const earMidY = (leftEar.y + rightEar.y) / 2
     const earDelta = nose.y - earMidY
 
-    // 2) 어깨선 대비 코 높이 비율 (어깨 너비 정규화)
+    // 2) 어깨선 대비 코 높이 비율 (어깨 너비 정규화, 정면 바른자세: ~0.65~0.75)
     const scY = (leftShoulder.y + rightShoulder.y) / 2
     const sw = Math.hypot(leftShoulder.x - rightShoulder.x, leftShoulder.y - rightShoulder.y) || 0.35
-    const headDownRatio = (scY - nose.y) / sw // 바른자세: ~0.70, 고개숙임: <0.58
+    const headDownRatio = (scY - nose.y) / sw
 
-    // 3) 복합 굴곡각 (Flexion Angle)
-    // headDownRatio가 0.68 이하로 떨어지거나 earDelta가 0.02 이상이면 고개 숙임 발생
-    const headDownDrop = Math.max(0, 0.68 - headDownRatio)
-    const flexionFactor = (earDelta * 280) + (headDownDrop * 55)
+    // 3) 고개 숙임 편차 (0.60 미만으로 떨어질 때 숙임으로 인식)
+    const headDownDrop = Math.max(0, 0.60 - headDownRatio)
+    const flexionFactor = (earDelta * 160) + (headDownDrop * 35)
 
-    // 시선 각도 산출 (-5° ~ -7°: 이상적, -10° 이하: 고개 숙임)
-    gazeAngle = Math.round(-flexionFactor - 5)
+    // 시선 각도 산출 (-3° ~ -6°: 자연스러운 정면 응시)
+    gazeAngle = Math.round(-flexionFactor - 3)
 
-    // 판정 임계치: -10° 이하이면 고개 숙임(조정 필요), +3° 이상이면 시선 너무 높음
-    if (gazeAngle <= -10) {
+    // 인체공학 판정: -13° 이하일 때만 확실한 고개 숙임으로 판정
+    if (gazeAngle <= -13) {
       gazeStatus = 'low'
       headXOffset = 12
-    } else if (gazeAngle >= 4) {
+    } else if (gazeAngle >= 5) {
       gazeStatus = 'high'
       headXOffset = 0
     } else {
