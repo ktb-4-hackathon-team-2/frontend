@@ -74,7 +74,7 @@ export default function Monitor() {
   const {
     meta, posture, paused, setPaused, postureSinceSec,
     alertCount, elapsedSec, stretchLeft, settings, camera, tick,
-    startStretchNow, postponeStretch, localDetection, endMonitoring,
+    adjustStretch, localDetection, endMonitoring,
     detectionVideoRef, pose, cameraView,
   } = useApp()
   const overlayRef = useRef(null)
@@ -103,7 +103,8 @@ export default function Monitor() {
   const regions = tracking && localDetection.regionScores ? localDetection.regionScores : meta.regions
   const tone = TONE[meta.tone]
   const stretchTotal = settings.stretchMin * 60
-  const stretchProgress = 1 - stretchLeft / stretchTotal
+  // +10분으로 남은 시간이 주기보다 길어질 수 있으므로 0 밑으로 내려가지 않게 클램프
+  const stretchProgress = Math.max(0, 1 - stretchLeft / stretchTotal)
 
   // 오늘·어제 기록 — 백엔드 대시보드에서 조회, 1분(집계 전송 주기)마다 갱신
   const [serverToday, setServerToday] = useState(null)
@@ -298,11 +299,17 @@ export default function Monitor() {
               style={{ width: `${stretchProgress * 100}%` }}
             />
           </div>
-          <div className="mt-1 flex gap-1.5">
-            <Btn size="sm" kind="outline" className="flex-1" onClick={startStretchNow}>
-              지금 하기
+          <div className="mt-1 flex gap-1">
+            <Btn size="sm" kind="ghost" className="flex-1 whitespace-nowrap px-1!" onClick={() => adjustStretch(-10)}>
+              −10분
             </Btn>
-            <Btn size="sm" kind="ghost" onClick={postponeStretch}>
+            <Btn size="sm" kind="ghost" className="flex-1 whitespace-nowrap px-1!" onClick={() => adjustStretch(-1)}>
+              −1분
+            </Btn>
+            <Btn size="sm" kind="ghost" className="flex-1 whitespace-nowrap px-1!" onClick={() => adjustStretch(1)}>
+              +1분
+            </Btn>
+            <Btn size="sm" kind="ghost" className="flex-1 whitespace-nowrap px-1!" onClick={() => adjustStretch(10)}>
               +10분
             </Btn>
           </div>
@@ -312,7 +319,7 @@ export default function Monitor() {
       {/* 설정 — 모니터링 화면에서 바로 조절 (설정 화면과 동일한 패널) */}
       <div className="col-span-12 mt-2">
         <MicroLabel className="mb-3">설정</MicroLabel>
-        <SettingsPanel />
+        <SettingsPanel compact />
       </div>
     </div>
   )

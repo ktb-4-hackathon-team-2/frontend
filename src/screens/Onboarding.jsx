@@ -6,8 +6,10 @@ import { CameraView } from '../components/CameraView'
 import { usePoseLandmarker } from '../hooks/usePoseLandmarker'
 import { Btn, Card, Chip, Icon, MicroLabel, PostureFigure } from '../components/ui'
 import { CAMERA_VIEWS, getSilhouette } from '../lib/guides'
+import { api } from '../lib/api'
+import { playChime } from '../lib/sound'
 
-const STEPS = ['시작', '카메라', '자세 가이드', '기준 자세', '완료']
+const STEPS = ['시작', '카메라', '자세 가이드', '기준 자세', '알림 설정']
 
 const REQUIRED_LANDMARKS = [0, 7, 8, 11, 12]
 const MIN_VISIBILITY = 0.55
@@ -215,7 +217,7 @@ function averageLandmarks(stack) {
 }
 
 export default function Onboarding() {
-  const { camera, setCalibrated, setCalibration, setScreen, resetSession, cameraView, setCameraView } = useApp()
+  const { camera, setCalibrated, setCalibration, setScreen, resetSession, cameraView, setCameraView, settings, updateSetting } = useApp()
   const [step, setStep] = useState(0)
   const [flash, setFlash] = useState(false)
   const [referencePose, setReferencePose] = useState(null)
@@ -283,6 +285,15 @@ export default function Onboarding() {
     const todayStr = new Date().toLocaleDateString()
     setCalibration({ landmarks: referencePose, at: todayStr, view: cameraView })
     setCalibrated(true)
+    // 온보딩에서 고른 설정을 계정에 저장 (PUT /api/settings) — 실패해도 모니터링 시작은 막지 않는다
+    api
+      .saveSettings({
+        sensitivity: settings.sensitivity,
+        sound: settings.sound,
+        maxAlertLevel: settings.maxAlertLevel,
+        stretchMin: settings.stretchMin,
+      })
+      .catch(() => {})
     setScreen('monitor')
     resetSession()
   }
@@ -598,44 +609,141 @@ export default function Onboarding() {
 
         {step === 3 && captureStep()}
 
-        {/* ── Step 4: 완료 (원래 버전 디자인으로 복원) ── */}
+        {/* ── Step 4: 완료 + 알림 설정 — 시작 버튼을 누르면 설정이 계정에 저장된다 ── */}
         {step === 4 && (
           <div className="rise flex w-full max-w-2xl flex-col items-center text-center">
-            <span className="flex h-16 w-16 items-center justify-center rounded-full border border-good/40 bg-good/10">
-              <Icon name="check" size={28} className="text-good" />
+            <span className="flex h-14 w-14 items-center justify-center rounded-full border border-good/40 bg-good/10">
+              <Icon name="check" size={26} className="text-good" />
             </span>
-            <h2 className="mt-5 text-3xl font-bold tracking-tight">기준 자세가 저장됐어요</h2>
+            <h2 className="mt-4 text-3xl font-bold tracking-tight">기준 자세가 저장됐어요</h2>
             <p className="mt-2 text-sm text-mid">
-              {cameraView === 'front' ? '정면 웹캠' : cameraView === 'left_diagonal' ? '좌측 대각선' : '우측 대각선'} 기준으로 하루 종일 조용히 지켜볼게요.
+              시작하기 전에 알림 방식을 정해 주세요 — 모니터링 중에도 설정에서 바꿀 수 있어요.
             </p>
 
-            <Card className="mt-8 w-full p-6">
-              <div className="flex items-center justify-center gap-4">
-                <div className="flex h-24 w-36 items-center justify-center rounded-lg border border-good/40 bg-good/10">
-                  <PostureFigure state="good" className="h-16 w-16 text-good" />
+            <Card className="mt-6 flex w-full items-center gap-4 p-4">
+              <div className="flex h-14 w-20 shrink-0 items-center justify-center rounded-lg border border-good/40 bg-good/10">
+                <PostureFigure state="good" className="h-9 w-9 text-good" />
+              </div>
+              <div className="text-left">
+                <div className="flex items-center gap-1.5 text-sm font-semibold text-good">
+                  <Icon name="check" size={14} />
+                  기준 스켈레톤 저장 완료 ({cameraView === 'front' ? '정면' : cameraView === 'left_diagonal' ? '좌측 대각' : '우측 대각'})
                 </div>
-                <div className="text-left">
-                  <div className="flex items-center gap-1.5 text-sm text-good font-semibold">
-                    <Icon name="check" size={15} />
-                    기준 스켈레톤 저장 완료 ({cameraView === 'front' ? '정면' : cameraView === 'left_diagonal' ? '좌측 대각' : '우측 대각'})
-                  </div>
-                  <p className="mt-1 text-xs text-mid">관절 {referencePose?.length ?? 0}개 좌표를 안전하게 저장했어요.</p>
+                <p className="mt-0.5 text-xs text-mid">관절 {referencePose?.length ?? 0}개 좌표만 이 기기에 저장했어요 — 영상은 전송되지 않아요.</p>
+              </div>
+            </Card>
+
+            <Card className="mt-4 w-full px-6 py-1 text-left">
+              <div className="flex items-center justify-between gap-6 border-b border-line py-4">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium">알림 단계</div>
+                  <div className="mt-0.5 text-xs text-dim">자세가 무너졌을 때 어디까지 개입할지 정해요</div>
+                </div>
+                <div className="flex shrink-0 overflow-hidden rounded-lg border border-line">
+                  {[
+                    { value: 1, name: '1 · 위젯만' },
+                    { value: 2, name: '2 · +토스트' },
+                    { value: 3, name: '3 · +전체 화면' },
+                  ].map((l) => (
+                    <button
+                      key={l.value}
+                      onClick={() => updateSetting('maxAlertLevel', l.value)}
+                      className={`cursor-pointer px-3.5 py-1.5 text-xs transition-colors ${
+                        settings.maxAlertLevel === l.value
+                          ? l.value === 3
+                            ? 'bg-warn3/15 font-medium text-warn3'
+                            : 'bg-white/[0.08] font-medium text-hi'
+                          : 'text-dim hover:text-mid'
+                      }`}
+                    >
+                      {l.name}
+                    </button>
+                  ))}
                 </div>
               </div>
-              <div className="mt-5 grid grid-cols-2 gap-3 border-t border-line pt-5 text-left">
-                <div className="text-xs text-mid">
-                  <span className="font-mono text-good">스켈레톤 좌표</span> — 기준 자세의 관절 위치만 저장
+
+              <div className="flex items-center justify-between gap-6 border-b border-line py-4">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium">알림음</div>
+                  <div className="mt-0.5 text-xs text-dim">누르면 미리 들려드려요 · 2단계 이상에서 재생</div>
                 </div>
-                <div className="text-xs text-mid">
-                  <span className="font-mono text-good">실루엣 고정</span> — 모니터링 시 같은 위치를 기준으로 비교
+                <div className="flex shrink-0 overflow-hidden rounded-lg border border-line">
+                  {[
+                    ['chime', '차임'],
+                    ['wood', '우드'],
+                    ['funny', '펀니'],
+                    ['none', '무음'],
+                  ].map(([v, name]) => (
+                    <button
+                      key={v}
+                      onClick={() => {
+                        updateSetting('sound', v)
+                        updateSetting('soundOn', v !== 'none')
+                        playChime(v)
+                      }}
+                      className={`cursor-pointer px-3.5 py-1.5 text-xs transition-colors ${
+                        settings.sound === v ? 'bg-white/[0.08] font-medium text-hi' : 'text-dim hover:text-mid'
+                      }`}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-6 border-b border-line py-4">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium">판정 민감도</div>
+                  <div className="mt-0.5 text-xs text-dim">높일수록 작은 흐트러짐에도 빨리 반응해요</div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="text-[11px] text-dim">느슨</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={settings.sensitivity}
+                    onChange={(e) => updateSetting('sensitivity', Number(e.target.value))}
+                    className="w-36 accent-good"
+                  />
+                  <span className="text-[11px] text-dim">민감</span>
+                  <span className="w-8 text-right font-mono text-xs text-mid">{settings.sensitivity}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-6 py-4">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium">스트레칭 제안 주기</div>
+                  <div className="mt-0.5 text-xs text-dim">바른 자세여도 정기적으로 몸을 풀도록 제안해요</div>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Btn
+                    size="sm"
+                    kind="ghost"
+                    disabled={settings.stretchMin <= 30}
+                    onClick={() => updateSetting('stretchMin', settings.stretchMin - 10)}
+                  >
+                    −
+                  </Btn>
+                  <span className="w-14 text-center font-mono text-sm font-semibold">{settings.stretchMin}분</span>
+                  <Btn
+                    size="sm"
+                    kind="ghost"
+                    disabled={settings.stretchMin >= 90}
+                    onClick={() => updateSetting('stretchMin', settings.stretchMin + 10)}
+                  >
+                    +
+                  </Btn>
                 </div>
               </div>
             </Card>
 
-            <Btn kind="primary" size="lg" className="mt-8" onClick={finish}>
+            <Btn kind="primary" size="lg" className="mt-6" onClick={finish}>
               모니터링 시작
               <Icon name="arrowRight" size={16} />
             </Btn>
+            <p className="mt-2.5 text-[11px] text-dim">시작하면 위 설정이 계정에 저장돼요.</p>
           </div>
         )}
       </div>

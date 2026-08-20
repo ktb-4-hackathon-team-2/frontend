@@ -31,7 +31,9 @@ function Row({ label, desc, children }) {
   )
 }
 
-export function SettingsPanel() {
+// compact: 모니터링 화면용 축약판 — 알림·카메라 배치&캘리브레이션·설정 저장만 남기고
+// 스트레칭·계정 카드는 숨긴다 (전체판은 설정 화면에서)
+export function SettingsPanel({ compact = false }) {
   const { settings, updateSetting, setCalibrated, stretchLeft, setStretchSuggest, calibration, cameraView, setCameraView } = useApp()
   const { member, logout } = useAuth()
 
@@ -167,6 +169,7 @@ export function SettingsPanel() {
       </Card>
 
       {/* 스트레칭 */}
+      {!compact && (
       <Card className="rise d2 mb-4 px-6 py-2">
         <div className="py-2">
           <MicroLabel className="pt-2">스트레칭</MicroLabel>
@@ -200,6 +203,7 @@ export function SettingsPanel() {
           </Row>
         </div>
       </Card>
+      )}
 
       {/* 캘리브레이션 & 카메라 배치 */}
       <Card className="rise d3 mb-4 px-6 py-2">
@@ -248,6 +252,7 @@ export function SettingsPanel() {
       </Card>
 
       {/* 계정 */}
+      {!compact && (
       <Card className="rise d4 mb-4 px-6 py-2">
         <div className="py-2">
           <MicroLabel className="pt-2">계정</MicroLabel>
@@ -259,6 +264,7 @@ export function SettingsPanel() {
           </Btn>
         </Row>
       </Card>
+      )}
 
       {/* 저장하기 — 민감도·알림음·알림 단계·스트레칭 주기를 계정에 저장 */}
       <Card className="rise d5 mb-4 flex items-center gap-4 px-6 py-4">
