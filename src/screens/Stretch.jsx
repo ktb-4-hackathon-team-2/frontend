@@ -369,7 +369,14 @@ function ActiveSession({ stretch, onExit }) {
             : { text: '사람을 찾는 중…', tone: 'text-dim' }
 
   return (
-    <div className="grid grid-cols-12 gap-4">
+    <>
+      <div className="rise mb-4">
+        <Btn size="sm" kind="outline" onClick={onExit}>
+          <Icon name="chevronRight" size={13} className="rotate-180" />
+          전체 스트레칭으로
+        </Btn>
+      </div>
+      <div className="grid grid-cols-12 gap-4">
       <Card className="rise col-span-7 flex flex-col p-6">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
@@ -520,7 +527,8 @@ function ActiveSession({ stretch, onExit }) {
           </p>
         )}
       </Card>
-    </div>
+      </div>
+    </>
   )
 }
 
