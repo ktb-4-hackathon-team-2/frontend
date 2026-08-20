@@ -443,6 +443,11 @@ export function AppProvider({ children }) {
     setStretchLeft(10 * 60)
   }, [])
 
+  // 다음 스트레칭까지 남은 시간 증감 (분 단위) — 1분 밑으로 내려 실수로 제안이 뜨지 않게 클램프
+  const adjustStretch = useCallback((deltaMin) => {
+    setStretchLeft((s) => Math.min(90 * 60, Math.max(60, s + deltaMin * 60)))
+  }, [])
+
   const startStretchNow = useCallback(() => {
     setStretchSuggest(false)
     setStretchLeft(settings.stretchMin * 60)
@@ -498,7 +503,7 @@ export function AppProvider({ children }) {
     widgetMode, setWidgetMode,
     settings, setSettings, updateSetting,
     alertCount, elapsedSec, stretchLeft, stretchSuggest, setStretchSuggest,
-    postponeStretch, startStretchNow, resetSession, endMonitoring, sessionSummary,
+    postponeStretch, startStretchNow, adjustStretch, resetSession, endMonitoring, sessionSummary,
     requestStretch,
     tick, camera, detectionVideoRef, lastLandmarksRef, localDetection, pose,
     pipWindow, openFloatingWidget, closeFloatingWidget,
